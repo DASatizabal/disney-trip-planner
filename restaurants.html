@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Disney DDP Planner — All Restaurants</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: { extend: { fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] } } }
+    };
+  </script>
+  <link rel="stylesheet" href="css/styles.css">
+  <style>
+    .sort-btn { cursor: pointer; user-select: none; }
+    .sort-btn:hover { color: #fbbf24; }
+    .sort-btn .arrow { opacity: 0.3; }
+    .sort-btn.active .arrow { opacity: 1; }
+    .row-ts { border-left: 3px solid var(--pool-a); }
+    .row-2ts { border-left: 3px solid #a78bfa; }
+    .row-qs { border-left: 3px solid var(--pool-b); }
+    .row-sn { border-left: 3px solid #fbbf24; }
+    .row-oop { border-left: 3px solid var(--oop); }
+    .row-unknown { border-left: 3px solid rgba(255,255,255,0.1); }
+    tr.highlight { background: rgba(251, 191, 36, 0.08) !important; }
+    body.light-mode tr.highlight { background: rgba(251, 191, 36, 0.12) !important; }
+  </style>
+</head>
+<body class="bg-slate-950 text-white min-h-screen font-sans">
+
+  <div class="bg-blob" style="width:600px;height:600px;top:-200px;left:-100px;background:#3b82f6;"></div>
+  <div class="bg-blob" style="width:500px;height:500px;bottom:-150px;right:-100px;background:#22c55e;"></div>
+
+  <!-- Top Bar -->
+  <header class="sticky top-0 z-30 glass-card-darker border-b border-white/10" style="border-radius:0;">
+    <div class="max-w-[1400px] mx-auto px-4 py-2 flex items-center gap-3">
+      <a href="index.html" class="flex items-center gap-2 hover:opacity-80 transition-opacity">
+        <i data-lucide="arrow-left" class="w-4 h-4"></i>
+        <span class="text-xs hidden sm:inline">Planner</span>
+      </a>
+      <div class="w-px h-5 bg-white/10"></div>
+      <div class="flex items-center gap-2 mr-auto">
+        <i data-lucide="book-open" class="w-5 h-5 text-amber-400"></i>
+        <h1 class="text-base font-bold tracking-tight">All Disney Restaurants</h1>
+        <span class="text-[10px] text-white/30 font-mono" id="count-tag"></span>
+      </div>
+      <button onclick="toggleTheme()" class="p-1.5 hover:bg-white/10 rounded-lg transition-colors" title="Toggle theme">
+        <i data-lucide="moon" class="w-4 h-4" id="theme-icon"></i>
+      </button>
+    </div>
+  </header>
+
+  <!-- Filters -->
+  <section class="max-w-[1400px] mx-auto px-4 pt-3">
+    <div class="glass-card p-3 flex flex-wrap gap-2 items-center">
+      <input type="text" id="search" placeholder="Search restaurants..."
+        class="flex-1 min-w-[200px] bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-white/30">
+      <select id="filter-location" class="bg-white/5 border border-white/10 rounded-lg px-2 py-1.5 text-xs focus:outline-none cursor-pointer">
+        <option value="all">All Locations</option>
+      </select>
+      <select id="filter-type" class="bg-white/5 border border-white/10 rounded-lg px-2 py-1.5 text-xs focus:outline-none cursor-pointer">
+        <option value="all">All Types</option>
+        <option value="Table Service">Table Service</option>
+        <option value="Quick Service">Quick Service</option>
+        <option value="Both">Both (QS + TS)</option>
+      </select>
+      <select id="filter-ddp" class="bg-white/5 border border-white/10 rounded-lg px-2 py-1.5 text-xs focus:outline-none cursor-pointer">
+        <option value="all">All DDP Status</option>
+        <option value="1TS">1 TS Credit</option>
+        <option value="2TS">2 TS Credits</option>
+        <option value="QS">Quick Service Credit</option>
+        <option value="SN">Snack Credit</option>
+        <option value="OOP">Out of Pocket / Not on DDP</option>
+        <option value="unknown">Unknown / Not in Planner</option>
+      </select>
+      <select id="filter-price" class="bg-white/5 border border-white/10 rounded-lg px-2 py-1.5 text-xs focus:outline-none cursor-pointer">
+        <option value="all">All Prices</option>
+        <option value="$">$ (Under $15)</option>
+        <option value="$$">$$ ($15-$35)</option>
+        <option value="$$$">$$$ ($35-$60)</option>
+        <option value="$$$$">$$$$ (Over $60)</option>
+      </select>
+      <label class="flex items-center gap-1.5 text-xs cursor-pointer">
+        <input type="checkbox" id="filter-reservation" class="rounded">
+        <span>Reservations</span>
+      </label>
+      <label class="flex items-center gap-1.5 text-xs cursor-pointer">
+        <input type="checkbox" id="filter-ddp-only" class="rounded">
+        <span>DDP Only</span>
+      </label>
+    </div>
+  </section>
+
+  <!-- Table -->
+  <main class="max-w-[1400px] mx-auto px-4 pt-3 pb-8">
+    <div class="glass-card overflow-hidden">
+      <div class="overflow-x-auto">
+        <table class="w-full text-xs">
+          <thead>
+            <tr class="border-b border-white/10 text-left text-white/50">
+              <th class="px-3 py-2 sort-btn" onclick="sortBy('name')">Name <span class="arrow">▲</span></th>
+              <th class="px-3 py-2 sort-btn hidden sm:table-cell" onclick="sortBy('type')">Type <span class="arrow">▲</span></th>
+              <th class="px-3 py-2 sort-btn" onclick="sortBy('location')">Location <span class="arrow">▲</span></th>
+              <th class="px-3 py-2 sort-btn hidden md:table-cell" onclick="sortBy('cuisine')">Cuisine <span class="arrow">▲</span></th>
+              <th class="px-3 py-2 sort-btn hidden lg:table-cell" onclick="sortBy('price')">Price <span class="arrow">▲</span></th>
+              <th class="px-3 py-2">DDP</th>
+              <th class="px-3 py-2 hidden md:table-cell">Flags</th>
+              <th class="px-3 py-2 hidden lg:table-cell">Notes</th>
+            </tr>
+          </thead>
+          <tbody id="table-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+  <script src="js/config.js"></script>
+  <script src="js/restaurant-db.js"></script>
+  <script src="js/csv-restaurants.js"></script>
+  <script>
+    // Merge CSV + DB into a single list
+    function norm(s) {
+      return (s||'').replace(/[®™©''""–—\-]/g,'').replace(/[^a-z0-9 ]/gi,'').toLowerCase().trim().replace(/ +/g,' ');
+    }
+
+    // Build DB lookup
+    const dbMap = new Map();
+    RESTAURANTS.forEach(r => {
+      dbMap.set(norm(r.name.replace(/ \(.*\)/,'')), r);
+    });
+
+    // Start with CSV as master
+    const allRestaurants = [];
+    const csvMatched = new Set();
+
+    CSV_RESTAURANTS.forEach(csv => {
+      const key = norm(csv.name);
+      let db = dbMap.get(key);
+      if (!db) {
+        for (const [dk, dr] of dbMap) {
+          if (dk.includes(key) || key.includes(dk)) { db = dr; break; }
+        }
+      }
+
+      const priceTier = csv.price.startsWith('$$$$') ? '$$$$' : csv.price.startsWith('$$$') ? '$$$' : csv.price.startsWith('$$') ? '$$' : csv.price.startsWith('$') ? '$' : '';
+
+      allRestaurants.push({
+        name: csv.name,
+        type: csv.type || (db ? db.category.replace('_',' ') : ''),
+        location: csv.location,
+        style: csv.style,
+        cuisine: db ? db.cuisine : extractCuisine(csv.price, csv.style),
+        price: csv.price,
+        priceTier,
+        reservation: csv.reservation === 'Y',
+        // DB enrichment
+        dbId: db ? db.id : null,
+        creditType: db ? db.creditType : null,
+        creditsConsumed: db ? db.creditsConsumed : null,
+        acceptsDDP: db ? db.acceptsDDP : null,
+        isCharacter: db ? db.isCharacter : false,
+        characterNames: db ? db.characterNames : null,
+        isBuffet: db ? db.isBuffet : false,
+        isSignature: db ? db.isSignature : false,
+        isDinnerShow: db ? db.isDinnerShow : false,
+        isLounge: db ? db.isLounge : false,
+        seafoodWarning: db ? db.seafoodWarning : false,
+        seafoodNotes: db ? db.seafoodNotes : null,
+        vipDiscountPct: db ? db.vipDiscountPct : 0,
+        vipDiscountMeals: db ? db.vipDiscountMeals : [],
+        familyReview: db ? db.familyReview : null,
+        familyBeenBefore: db ? db.familyBeenBefore : false,
+        ddpValue: db ? db.ddpValue : null,
+        notes: db ? db.notes : null,
+        apDiscountPct: db ? db.apDiscountPct : 0,
+      });
+
+      if (db) csvMatched.add(db.id);
+    });
+
+    // Add DB entries not in CSV
+    RESTAURANTS.forEach(r => {
+      if (csvMatched.has(r.id)) return;
+      const priceTier = r.avgAdultPrice > 60 ? '$$$$' : r.avgAdultPrice > 35 ? '$$$' : r.avgAdultPrice > 15 ? '$$' : '$';
+      allRestaurants.push({
+        name: r.name,
+        type: r.category === 'table_service' ? 'Table Service' : r.category === 'quick_service' ? 'Quick Service' : r.category === 'snack' ? 'Quick Service' : 'Table Service',
+        location: r.location,
+        style: '',
+        cuisine: r.cuisine,
+        price: '',
+        priceTier,
+        reservation: false,
+        dbId: r.id,
+        creditType: r.creditType,
+        creditsConsumed: r.creditsConsumed,
+        acceptsDDP: r.acceptsDDP,
+        isCharacter: r.isCharacter,
+        characterNames: r.characterNames,
+        isBuffet: r.isBuffet,
+        isSignature: r.isSignature,
+        isDinnerShow: r.isDinnerShow,
+        isLounge: r.isLounge,
+        seafoodWarning: r.seafoodWarning,
+        seafoodNotes: r.seafoodNotes,
+        vipDiscountPct: r.vipDiscountPct,
+        vipDiscountMeals: r.vipDiscountMeals,
+        familyReview: r.familyReview,
+        familyBeenBefore: r.familyBeenBefore,
+        ddpValue: r.ddpValue,
+        notes: r.notes,
+        apDiscountPct: r.apDiscountPct,
+      });
+    });
+
+    function extractCuisine(price, style) {
+      const parts = [];
+      if (price) {
+        const m = price.match(/\),\s*(.+)/);
+        if (m) parts.push(...m[1].split(',').map(s=>s.trim()));
+      }
+      if (!parts.length && style) {
+        const tags = style.split(',').map(s=>s.trim()).filter(s =>
+          !['a la Carte','Buffet','Character Dining','Casual Dining','Fine/Signature Dining','Quick Service Restaurant',
+           'Mobile Orders','Bar-Lounge','Pool Bar','Snack','Quick Service Kiosk','Quick Service - Coffee','Bakery',
+           'Dinner Shows','Family Style','Dining Events','Reservations Accepted','Festival Kiosk','Prix Fixe',
+           'Quick Service'].includes(s));
+        if (tags.length) parts.push(...tags);
+      }
+      return parts.join(', ') || null;
+    }
+
+    // Populate location filter
+    const locations = [...new Set(allRestaurants.map(r=>r.location).filter(Boolean))].sort();
+    const locSel = document.getElementById('filter-location');
+    locations.forEach(l => {
+      const o = document.createElement('option');
+      o.value = l; o.textContent = l;
+      locSel.appendChild(o);
+    });
+
+    // State
+    let sortCol = 'name', sortAsc = true;
+
+    function sortBy(col) {
+      if (sortCol === col) sortAsc = !sortAsc;
+      else { sortCol = col; sortAsc = true; }
+      renderTable();
+    }
+
+    function renderTable() {
+      const search = document.getElementById('search').value.toLowerCase().trim();
+      const loc = document.getElementById('filter-location').value;
+      const type = document.getElementById('filter-type').value;
+      const ddp = document.getElementById('filter-ddp').value;
+      const price = document.getElementById('filter-price').value;
+      const resOnly = document.getElementById('filter-reservation').checked;
+      const ddpOnly = document.getElementById('filter-ddp-only').checked;
+
+      let filtered = allRestaurants.filter(r => {
+        if (search && !(r.name.toLowerCase().includes(search) || (r.cuisine||'').toLowerCase().includes(search) || (r.location||'').toLowerCase().includes(search) || (r.notes||'').toLowerCase().includes(search) || (r.characterNames||'').toLowerCase().includes(search))) return false;
+        if (loc !== 'all' && r.location !== loc) return false;
+        if (type === 'Table Service' && !r.type.includes('Table Service')) return false;
+        if (type === 'Quick Service' && !r.type.includes('Quick Service')) return false;
+        if (type === 'Both' && !(r.type.includes('Quick Service') && r.type.includes('Table Service'))) return false;
+        if (ddp === 'unknown' && r.creditType) return false;
+        if (ddp !== 'all' && ddp !== 'unknown' && r.creditType !== ddp) return false;
+        if (price !== 'all' && r.priceTier !== price) return false;
+        if (resOnly && !r.reservation) return false;
+        if (ddpOnly && !r.acceptsDDP) return false;
+        return true;
+      });
+
+      filtered.sort((a,b) => {
+        let va = a[sortCol] || '', vb = b[sortCol] || '';
+        if (typeof va === 'string') va = va.toLowerCase();
+        if (typeof vb === 'string') vb = vb.toLowerCase();
+        if (va < vb) return sortAsc ? -1 : 1;
+        if (va > vb) return sortAsc ? 1 : -1;
+        return 0;
+      });
+
+      document.getElementById('count-tag').textContent = `${filtered.length} / ${allRestaurants.length}`;
+
+      const tbody = document.getElementById('table-body');
+      tbody.innerHTML = filtered.map(r => {
+        const rowClass = r.creditType === '1TS' ? 'row-ts' : r.creditType === '2TS' ? 'row-2ts' : r.creditType === 'QS' ? 'row-qs' : r.creditType === 'SN' ? 'row-sn' : r.creditType === 'OOP' ? 'row-oop' : 'row-unknown';
+        const highlight = r.familyReview || r.vipDiscountPct > 0 ? 'highlight' : '';
+
+        const ddpBadge = r.creditType
+          ? `<span class="badge ${badgeClass(r.creditType)}">${r.creditType}</span>`
+          : '<span class="text-white/20">—</span>';
+
+        const flags = [];
+        if (r.seafoodWarning) flags.push('<span class="badge badge-seafood" title="Seafood - Lisa">SEAFOOD</span>');
+        if (r.isCharacter) flags.push('<span class="badge badge-character" title="'+((r.characterNames||'Characters'))+'">CHARS</span>');
+        if (r.vipDiscountPct > 0) flags.push('<span class="badge badge-vip">'+r.vipDiscountPct+'% VIP</span>');
+        if (r.familyReview === 'loved') flags.push('<span class="badge badge-loved">LOVED</span>');
+        if (r.familyReview === 'liked') flags.push('<span class="badge badge-loved">LIKED</span>');
+        if (r.familyReview === 'skip') flags.push('<span class="badge badge-skip">SKIP</span>');
+        if (r.isBuffet) flags.push('<span class="text-[9px] text-white/30">BUFFET</span>');
+        if (r.isSignature) flags.push('<span class="text-[9px] text-white/30">SIG</span>');
+        if (r.isDinnerShow) flags.push('<span class="text-[9px] text-white/30">SHOW</span>');
+        if (r.reservation) flags.push('<span class="text-[9px] text-green-400/60">RES</span>');
+        if (r.ddpValue === 'excellent') flags.push('<span class="ddp-stars text-[9px]">★★★</span>');
+        else if (r.ddpValue === 'good') flags.push('<span class="ddp-stars text-[9px]">★★</span>');
+
+        const priceShort = r.priceTier || '';
+        const notesText = r.notes || '';
+
+        return `<tr class="border-b border-white/5 hover:bg-white/5 ${rowClass} ${highlight}">
+          <td class="px-3 py-2 font-medium">${r.name}</td>
+          <td class="px-3 py-2 text-white/40 hidden sm:table-cell">${r.type}</td>
+          <td class="px-3 py-2 text-white/50">${shortLocation(r.location)}</td>
+          <td class="px-3 py-2 text-white/40 hidden md:table-cell">${r.cuisine || ''}</td>
+          <td class="px-3 py-2 text-white/40 hidden lg:table-cell">${priceShort}</td>
+          <td class="px-3 py-2">${ddpBadge}</td>
+          <td class="px-3 py-2 hidden md:table-cell"><div class="flex flex-wrap gap-0.5">${flags.join('')}</div></td>
+          <td class="px-3 py-2 text-white/30 hidden lg:table-cell max-w-[250px] truncate" title="${notesText.replace(/"/g,'&quot;')}">${notesText}</td>
+        </tr>`;
+      }).join('');
+
+      // Update sort indicators
+      document.querySelectorAll('.sort-btn').forEach(btn => {
+        const col = btn.getAttribute('onclick').match(/'(\w+)'/)[1];
+        btn.classList.toggle('active', col === sortCol);
+        btn.querySelector('.arrow').textContent = col === sortCol ? (sortAsc ? '▲' : '▼') : '▲';
+      });
+
+      lucide.createIcons();
+    }
+
+    function badgeClass(type) {
+      return { '1TS':'badge-ts', '2TS':'badge-2ts', 'QS':'badge-qs', 'SN':'badge-sn', 'OOP':'badge-oop' }[type] || '';
+    }
+
+    function shortLocation(loc) {
+      return (loc||'').replace("Disney's ",'').replace(' Theme Park','').replace(' Water Park','').replace(' Resort & Spa','').replace(' Resort','').replace(' Park','');
+    }
+
+    // Theme
+    function toggleTheme() {
+      const isLight = document.body.classList.toggle('light-mode');
+      localStorage.setItem('ddp_planner_theme', isLight ? 'light' : 'dark');
+      document.getElementById('theme-icon').setAttribute('data-lucide', isLight ? 'sun' : 'moon');
+      lucide.createIcons();
+    }
+    if (localStorage.getItem('ddp_planner_theme') === 'light') {
+      document.body.classList.add('light-mode');
+      document.getElementById('theme-icon').setAttribute('data-lucide', 'sun');
+    }
+
+    // Bind filters
+    document.getElementById('search').addEventListener('input', () => { clearTimeout(window._st); window._st = setTimeout(renderTable, 150); });
+    ['filter-location','filter-type','filter-ddp','filter-price'].forEach(id => document.getElementById(id).addEventListener('change', renderTable));
+    ['filter-reservation','filter-ddp-only'].forEach(id => document.getElementById(id).addEventListener('change', renderTable));
+
+    // Init
+    renderTable();
+    lucide.createIcons();
+  </script>
+</body>
+</html>
