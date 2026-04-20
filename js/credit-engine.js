@@ -146,22 +146,52 @@ const CreditEngine = {
     return conflicts;
   },
 
-  estimateOOP(planState) {
-    let total = 0;
+  // C6: OOP with committed vs projected split
+  estimateOOPDetailed(planState) {
+    let committed = 0;
+    let vipSavings = 0;
+    let apSavings = 0;
+
     Object.values(planState.days).forEach(day => {
       Object.values(day.selections).forEach(sel => {
         if (!sel || sel.paymentMethod === 'ddp') return;
         const r = this._getRestaurant(sel.restaurantId);
         if (!r) return;
-        const adultPrice = r.avgAdultPrice || 0;
-        const kidPrice = r.avgKidPrice || 0;
-        let price = adultPrice * 3 + kidPrice;
+        const fullPrice = (r.avgAdultPrice || 0) * 3 + (r.avgKidPrice || 0);
+        let price = fullPrice;
         if (sel.paymentMethod === 'vip') {
-          price *= (1 - (r.vipDiscountPct || 0) / 100);
+          const discount = fullPrice * (r.vipDiscountPct || 0) / 100;
+          price -= discount;
+          vipSavings += discount;
         }
-        total += price;
+        if (sel.paymentMethod === 'ap') {
+          const discount = fullPrice * (r.apDiscountPct || 0) / 100;
+          price -= discount;
+          apSavings += discount;
+        }
+        committed += price;
       });
     });
-    return Math.round(total);
+
+    return {
+      committed: Math.round(committed),
+      vipSavings: Math.round(vipSavings),
+      apSavings: Math.round(apSavings)
+    };
+  },
+
+  // C5: AP discount info for a restaurant+date+slot
+  getAPInfo(restaurantId, dateStr, mealSlot) {
+    const r = this._getRestaurant(restaurantId);
+    if (!r || !r.apDiscountPct) return { available: false, pct: 0, estimatedSavings: 0 };
+
+    const price = (r.avgAdultPrice || 40) * 3 + (r.avgKidPrice || 15);
+    const savings = Math.round(price * (r.apDiscountPct / 100));
+    return {
+      available: true,
+      pct: r.apDiscountPct,
+      estimatedSavings: savings,
+      notes: r.apDiscountNotes
+    };
   }
 };

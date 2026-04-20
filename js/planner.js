@@ -126,22 +126,35 @@ const Planner = {
 
   _renderSplitParks(date, day) {
     const sp = day.splitParks || { am: day.park, pm: day.park };
+    const ratio = day.splitRatio || { am: 50, pm: 50 };
+    const parkOpts = ['Magic Kingdom', 'EPCOT', 'Hollywood Studios', 'Animal Kingdom', 'Disney Springs', 'Water Park - Typhoon Lagoon', 'Water Park - Blizzard Beach', 'Resort Day'];
     return `
-      <div class="grid grid-cols-2 gap-1 mb-2">
+      <div class="grid grid-cols-2 gap-1 mb-1">
         <select onchange="Planner.changeSplitPark('${date}', 'am', this.value)"
           class="bg-white/5 border border-white/10 rounded-lg px-1.5 py-1 text-[10px] focus:outline-none cursor-pointer">
-          ${['Magic Kingdom', 'EPCOT', 'Hollywood Studios', 'Animal Kingdom', 'Disney Springs', 'Water Park - Typhoon Lagoon', 'Water Park - Blizzard Beach', 'Resort Day'].map(
-            p => `<option value="${p}" ${sp.am === p ? 'selected' : ''}>${p}</option>`
-          ).join('')}
+          ${parkOpts.map(p => `<option value="${p}" ${sp.am === p ? 'selected' : ''}>${p}</option>`).join('')}
         </select>
         <select onchange="Planner.changeSplitPark('${date}', 'pm', this.value)"
           class="bg-white/5 border border-white/10 rounded-lg px-1.5 py-1 text-[10px] focus:outline-none cursor-pointer">
-          ${['Magic Kingdom', 'EPCOT', 'Hollywood Studios', 'Animal Kingdom', 'Disney Springs', 'Water Park - Typhoon Lagoon', 'Water Park - Blizzard Beach', 'Resort Day'].map(
-            p => `<option value="${p}" ${sp.pm === p ? 'selected' : ''}>${p}</option>`
-          ).join('')}
+          ${parkOpts.map(p => `<option value="${p}" ${sp.pm === p ? 'selected' : ''}>${p}</option>`).join('')}
         </select>
       </div>
+      <div class="flex items-center gap-1 mb-2">
+        <span class="text-[9px] text-white/30 w-6">${ratio.am}%</span>
+        <input type="range" min="10" max="90" step="10" value="${ratio.am}"
+          onchange="Planner.changeSplitRatio('${date}', this.value)"
+          class="flex-1 h-1 appearance-none bg-white/10 rounded cursor-pointer" style="accent-color: var(--pool-a);">
+        <span class="text-[9px] text-white/30 w-6 text-right">${ratio.pm}%</span>
+      </div>
     `;
+  },
+
+  changeSplitRatio(date, amPct) {
+    const am = parseInt(amPct);
+    this._planState.days[date].splitRatio = { am, pm: 100 - am };
+    Scenarios.save(this._planState);
+    this.render();
+    lucide.createIcons();
   },
 
   _renderSlot(td, day, slot) {
@@ -171,7 +184,13 @@ const Planner = {
       ? `<span class="badge badge-pool-${(sel.pool || td.pool).toLowerCase()}">DDP ${sel.pool || td.pool}</span>`
       : sel.paymentMethod === 'vip'
         ? '<span class="badge badge-vip">VIP</span>'
-        : '<span class="badge badge-oop">OOP</span>';
+        : sel.paymentMethod === 'ap'
+          ? '<span class="badge badge-vip">AP</span>'
+          : '<span class="badge badge-oop">OOP</span>';
+
+    // C5: AP discount badge
+    const apBadge = (r.apDiscountPct && sel.paymentMethod !== 'ap')
+      ? `<span class="text-[9px] text-amber-400/50">AP ${r.apDiscountPct}%</span>` : '';
 
     return `
       <div class="meal-slot meal-slot-filled relative group ${isSnack ? '' : ''}"
@@ -183,6 +202,7 @@ const Planner = {
             <div class="flex items-center gap-1 mt-0.5 flex-wrap">
               <span class="badge ${badgeClass}">${r.creditType}</span>
               ${payBadge}
+              ${apBadge}
               ${r.seafoodWarning ? '<span class="badge badge-seafood" title="Seafood - Lisa allergy">SEAFOOD</span>' : ''}
               ${r.familyReview === 'loved' ? '<span class="badge badge-loved">LOVED</span>' : ''}
               ${r.familyReview === 'liked' ? '<span class="badge badge-loved">LIKED</span>' : ''}
@@ -259,6 +279,22 @@ const Planner = {
         compact.className = [ba.ts, ba.qs, ba.sn].some(b => b.remaining < 0) ? 'text-red-400' : '';
       }
     });
+
+    // C6: OOP tracker
+    const oop = CreditEngine.estimateOOPDetailed(this._planState);
+    const rewardsInput = document.getElementById('rewards-dollars');
+    const rewards = parseFloat(rewardsInput?.value) || 0;
+    const net = Math.max(0, oop.committed - rewards);
+
+    const oopEl = document.getElementById('oop-committed');
+    const netEl = document.getElementById('oop-net');
+    const savingsEl = document.getElementById('oop-savings');
+    if (oopEl) oopEl.textContent = `$${oop.committed}`;
+    if (netEl) netEl.textContent = `$${net}`;
+    if (savingsEl) {
+      const totalSavings = oop.vipSavings + oop.apSavings;
+      savingsEl.textContent = totalSavings > 0 ? `Saving $${totalSavings} (VIP $${oop.vipSavings} + AP $${oop.apSavings})` : '';
+    }
   },
 
   // Conflicts
@@ -343,7 +379,8 @@ const Planner = {
       restaurantId,
       paymentMethod,
       pool: paymentMethod === 'ddp' ? pool : null,
-      notes: ''
+      notes: '',
+      adrNumber: ''
     };
 
     this._onChanged();
@@ -365,17 +402,39 @@ const Planner = {
     });
   },
 
-  // Park changes
+  // Park changes — C1: detect stranded selections and offer review
   changePark(date, park) {
     History.push(JSON.parse(JSON.stringify(this._planState)));
-    this._planState.days[date].park = park;
+    const day = this._planState.days[date];
+    const oldPark = day.park;
+    day.park = park;
     if (park === 'Split Day') {
-      this._planState.days[date].splitDay = true;
-      if (!this._planState.days[date].splitParks) {
-        this._planState.days[date].splitParks = { am: 'Magic Kingdom', pm: 'EPCOT' };
+      day.splitDay = true;
+      if (!day.splitParks) {
+        day.splitParks = { am: 'Magic Kingdom', pm: 'EPCOT' };
       }
     }
     this._onChanged();
+
+    // C1: Check for stranded selections after park change
+    if (park !== oldPark && park !== 'none' && !park.startsWith('Resort') && !park.startsWith('Travel') && !park.startsWith('Split')) {
+      const stranded = [];
+      MEAL_SLOTS.forEach(slot => {
+        const sel = day.selections[slot];
+        if (!sel) return;
+        const r = CreditEngine._getRestaurant(sel.restaurantId);
+        if (!r) return;
+        const isParkRestaurant = ['Magic Kingdom', 'EPCOT', 'Hollywood Studios', 'Animal Kingdom', 'Disney Springs'].includes(r.location);
+        if (isParkRestaurant && r.location !== park) {
+          stranded.push({ slot, name: r.name, location: r.location, creditType: r.creditType });
+        }
+      });
+
+      if (stranded.length > 0) {
+        const names = stranded.map(s => s.name).join(', ');
+        App.toast(`${stranded.length} selection${stranded.length > 1 ? 's' : ''} at different park: ${names}`, 'warning');
+      }
+    }
   },
 
   changeSplitPark(date, period, park) {

@@ -78,6 +78,12 @@
 
       <!-- Actions -->
       <div class="flex items-center gap-1">
+        <button onclick="App.showTripSummary()" class="p-1.5 hover:bg-white/10 rounded-lg transition-colors" title="Trip Summary">
+          <i data-lucide="clipboard-list" class="w-4 h-4 text-amber-400"></i>
+        </button>
+        <button onclick="App.sharePlan()" class="p-1.5 hover:bg-white/10 rounded-lg transition-colors" title="Copy share link">
+          <i data-lucide="share-2" class="w-4 h-4"></i>
+        </button>
         <button onclick="App.exportPlan()" class="p-1.5 hover:bg-white/10 rounded-lg transition-colors" title="Export JSON">
           <i data-lucide="download" class="w-4 h-4"></i>
         </button>
@@ -175,6 +181,28 @@
         <span class="badge badge-pool-b text-[9px]">B</span>
         <span id="pool-b-compact">16ts 16qs 16sn</span>
       </div>
+    </div>
+
+    <!-- C6: OOP + Disney Rewards tracker -->
+    <div class="glass-card p-2 px-3 mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+      <div class="flex items-center gap-1.5">
+        <i data-lucide="wallet" class="w-3.5 h-3.5 text-rose-400"></i>
+        <span class="text-white/50">OOP Committed:</span>
+        <span class="font-semibold text-rose-300" id="oop-committed">$0</span>
+      </div>
+      <div class="w-px h-4 bg-white/10 hidden sm:block"></div>
+      <div class="flex items-center gap-1.5">
+        <i data-lucide="badge-dollar-sign" class="w-3.5 h-3.5 text-green-400"></i>
+        <span class="text-white/50">Rewards $:</span>
+        <input type="number" id="rewards-dollars" value="806.41" step="0.01" min="0"
+          class="w-20 bg-white/5 border border-white/10 rounded px-1.5 py-0.5 text-xs text-green-300 font-semibold focus:outline-none focus:border-green-400/30">
+      </div>
+      <div class="w-px h-4 bg-white/10 hidden sm:block"></div>
+      <div class="flex items-center gap-1.5">
+        <span class="text-white/50">Net OOP:</span>
+        <span class="font-semibold" id="oop-net">$0</span>
+      </div>
+      <div class="text-[10px] text-amber-400/50 ml-auto" id="oop-savings"></div>
     </div>
   </section>
 
@@ -283,6 +311,22 @@
         <div class="space-y-2" id="pool-options"></div>
         <button onclick="RestaurantPicker.closePool()" class="mt-3 w-full text-center text-xs text-white/40 hover:text-white/60 py-1">Cancel</button>
       </div>
+    </div>
+  </div>
+
+  <!-- C7: Trip Summary Modal -->
+  <div class="modal-backdrop" id="summary-modal">
+    <div class="modal-content" style="max-width:550px;">
+      <div class="sticky top-0 z-10 p-3 border-b border-white/10 flex items-center justify-between" style="background:inherit; border-radius: 1rem 1rem 0 0;">
+        <h2 class="text-base font-bold flex items-center gap-2">
+          <i data-lucide="clipboard-list" class="w-4 h-4 text-amber-400"></i>
+          Trip Summary
+        </h2>
+        <button onclick="App.closeSummary()" class="p-1 hover:bg-white/10 rounded-lg">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+      <div class="p-4" id="summary-body"></div>
     </div>
   </div>
 

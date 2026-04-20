@@ -183,6 +183,7 @@ const RestaurantPicker = {
     container.innerHTML = results.map(r => {
       const badgeClass = this._creditBadgeClass(r.creditType);
       const vip = r.id ? CreditEngine.getVIPInfo(r.id, this._dayDate, this._mealSlot) : { available: false };
+      const ap = (r.apDiscountPct && r.apDiscountPct > 0) ? { available: true, pct: r.apDiscountPct } : { available: false };
       const valueStars = this._valueStars(r.ddpValue);
       const selectAttr = r.closed
         ? 'style="opacity:0.4;pointer-events:none;"'
@@ -206,6 +207,7 @@ const RestaurantPicker = {
                 ${r.familyReview === 'liked' ? '<span class="badge badge-loved">LIKED</span>' : ''}
                 ${r.familyReview === 'skip' ? '<span class="badge badge-skip">SKIP</span>' : ''}
                 ${vip.available ? `<span class="badge badge-vip">${vip.pct}% VIP</span>` : ''}
+                ${ap.available && !vip.available ? `<span class="text-[9px] text-amber-400/50">AP ${ap.pct}%</span>` : ''}
               </div>
               ${r.characterNames ? `<div class="text-[10px] text-purple-300/60 mt-0.5">${r.characterNames}</div>` : ''}
               ${r.notes ? `<div class="text-[10px] text-white/25 mt-0.5">${r.notes}</div>` : ''}
@@ -264,14 +266,20 @@ const RestaurantPicker = {
 
     const td = TRIP_DAYS.find(d => d.date === this._dayDate);
     const vip = r.id ? CreditEngine.getVIPInfo(r.id, this._dayDate, this._mealSlot) : { available: false };
+    const ap = r.id ? CreditEngine.getAPInfo(r.id, this._dayDate, this._mealSlot) : { available: false };
 
     if (!r.acceptsDDP || r.creditType === 'OOP') {
-      this._finalizeSelection(r.id || r._tempId, 'oop', null);
+      // C5: OOP restaurant but might have AP discount
+      if (ap.available) {
+        this._showPaymentModal(r, null, ap);
+      } else {
+        this._finalizeSelection(r.id || r._tempId, 'oop', null);
+      }
       return;
     }
 
-    if (vip.available) {
-      this._showPaymentModal(r, vip);
+    if (vip.available || ap.available) {
+      this._showPaymentModal(r, vip.available ? vip : null, ap.available ? ap : null);
       return;
     }
 
@@ -284,31 +292,53 @@ const RestaurantPicker = {
     this._finalizeSelection(r.id || r._tempId, 'ddp', pools[0]);
   },
 
-  _showPaymentModal(restaurant, vipInfo) {
+  _showPaymentModal(restaurant, vipInfo, apInfo) {
     const modal = document.getElementById('payment-modal');
     document.getElementById('payment-restaurant-name').textContent = restaurant.name;
-    document.getElementById('payment-context').textContent =
-      `${vipInfo.pct}% V.I.PASSHOLDER discount available! Estimated savings: ~$${vipInfo.estimatedSavings}`;
+
+    const contextParts = [];
+    if (vipInfo) contextParts.push(`${vipInfo.pct}% VIP discount: save ~$${vipInfo.estimatedSavings}`);
+    if (apInfo) contextParts.push(`AP ${apInfo.pct}% off: save ~$${apInfo.estimatedSavings}${apInfo.notes ? ' (' + apInfo.notes + ')' : ''}`);
+    document.getElementById('payment-context').textContent = contextParts.join(' | ');
 
     const rid = restaurant.id || restaurant._tempId;
+    const ridJS = typeof rid === 'number' ? rid : "'" + rid + "'";
+    const isDDP = restaurant.acceptsDDP && restaurant.creditType !== 'OOP';
 
-    let options = `
-      <button onclick="RestaurantPicker._onPaymentChoice(${typeof rid === 'number' ? rid : "'" + rid + "'"}, 'vip')"
-        class="w-full text-left p-3 rounded-lg border border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 transition-colors">
-        <div class="text-sm font-medium text-amber-300">Use ${vipInfo.pct}% VIP Discount</div>
-        <div class="text-[11px] text-white/40 mt-0.5">Pay OOP ~$${Math.round((restaurant.avgAdultPrice || 40) * 3 * (1 - vipInfo.pct / 100))} and save your DDP credit</div>
-      </button>
-      <button onclick="RestaurantPicker._onPaymentChoice(${typeof rid === 'number' ? rid : "'" + rid + "'"}, 'ddp')"
+    let options = '';
+
+    if (vipInfo) {
+      options += `
+        <button onclick="RestaurantPicker._onPaymentChoice(${ridJS}, 'vip')"
+          class="w-full text-left p-3 rounded-lg border border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 transition-colors">
+          <div class="text-sm font-medium text-amber-300">Use ${vipInfo.pct}% VIP Discount</div>
+          <div class="text-[11px] text-white/40 mt-0.5">Pay OOP ~$${Math.round((restaurant.avgAdultPrice || 40) * 3 * (1 - vipInfo.pct / 100))} and save your DDP credit</div>
+        </button>`;
+    }
+
+    if (apInfo) {
+      options += `
+        <button onclick="RestaurantPicker._onPaymentChoice(${ridJS}, 'ap')"
+          class="w-full text-left p-3 rounded-lg border border-amber-400/20 bg-amber-400/5 hover:bg-amber-400/10 transition-colors">
+          <div class="text-sm font-medium text-amber-200">Use AP ${apInfo.pct}% Discount</div>
+          <div class="text-[11px] text-white/40 mt-0.5">Pay OOP ~$${Math.round((restaurant.avgAdultPrice || 40) * 3 * (1 - apInfo.pct / 100))}${apInfo.notes ? ' — ' + apInfo.notes : ''}</div>
+        </button>`;
+    }
+
+    if (isDDP) {
+      options += `
+        <button onclick="RestaurantPicker._onPaymentChoice(${ridJS}, 'ddp')"
+          class="w-full text-left p-3 rounded-lg border border-white/10 hover:bg-white/5 transition-colors">
+          <div class="text-sm font-medium">Use DDP Credit</div>
+          <div class="text-[11px] text-white/40 mt-0.5">${restaurant.creditsConsumed} ${(restaurant.creditCategory || 'ts').toUpperCase()} credit${restaurant.creditsConsumed > 1 ? 's' : ''}</div>
+        </button>`;
+    }
+
+    options += `
+      <button onclick="RestaurantPicker._onPaymentChoice(${ridJS}, 'oop')"
         class="w-full text-left p-3 rounded-lg border border-white/10 hover:bg-white/5 transition-colors">
-        <div class="text-sm font-medium">Use DDP Credit</div>
-        <div class="text-[11px] text-white/40 mt-0.5">${restaurant.creditsConsumed} ${(restaurant.creditCategory || 'ts').toUpperCase()} credit${restaurant.creditsConsumed > 1 ? 's' : ''}</div>
-      </button>
-      <button onclick="RestaurantPicker._onPaymentChoice(${typeof rid === 'number' ? rid : "'" + rid + "'"}, 'oop')"
-        class="w-full text-left p-3 rounded-lg border border-white/10 hover:bg-white/5 transition-colors">
-        <div class="text-sm font-medium text-white/60">Pay Out of Pocket</div>
-        <div class="text-[11px] text-white/40 mt-0.5">No discount, no DDP credit</div>
-      </button>
-    `;
+        <div class="text-sm font-medium text-white/60">Pay Out of Pocket (Full Price)</div>
+      </button>`;
 
     document.getElementById('payment-options').innerHTML = options;
     modal.classList.add('active');

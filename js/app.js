@@ -20,6 +20,20 @@ const App = {
       this.updateUndoRedo();
     });
 
+    // C4: Check for shared plan in URL hash
+    this._loadFromHash();
+
+    // C6: Rewards dollars persistence
+    const savedRewards = localStorage.getItem(`${STORAGE_PREFIX}_rewards`) || '806.41';
+    const rewardsInput = document.getElementById('rewards-dollars');
+    if (rewardsInput) {
+      rewardsInput.value = savedRewards;
+      rewardsInput.addEventListener('change', () => {
+        localStorage.setItem(`${STORAGE_PREFIX}_rewards`, rewardsInput.value);
+        Planner.renderCreditDashboard();
+      });
+    }
+
     lucide.createIcons();
     this.updateUndoRedo();
   },
@@ -146,10 +160,66 @@ const App = {
     }, true);
   },
 
-  // Export/Import — B5: confirm before overwriting
+  // Export/Import
   exportPlan() {
     Storage.exportJSON(Planner.getState(), Scenarios.getCurrent());
     this.toast('Plan exported', 'success');
+  },
+
+  // C4: Share link (compressed URL hash or clipboard fallback)
+  async sharePlan() {
+    const plan = Planner.getState();
+    const json = JSON.stringify(plan);
+
+    try {
+      // Try gzip + base64 for URL hash
+      const stream = new Blob([json]).stream().pipeThrough(new CompressionStream('gzip'));
+      const compressed = await new Response(stream).arrayBuffer();
+      const b64 = btoa(String.fromCharCode(...new Uint8Array(compressed)));
+      const hash = '#plan=' + encodeURIComponent(b64);
+
+      if (hash.length <= 2000) {
+        const url = window.location.origin + window.location.pathname + hash;
+        await navigator.clipboard.writeText(url);
+        this.toast('Share link copied to clipboard', 'success');
+        return;
+      }
+    } catch (e) {
+      // CompressionStream not supported or other error
+    }
+
+    // Fallback: copy JSON to clipboard
+    try {
+      await navigator.clipboard.writeText(json);
+      this.toast('Plan too large for share link, copied JSON to clipboard instead', 'warning');
+    } catch (e) {
+      this.toast('Failed to copy to clipboard', 'error');
+    }
+  },
+
+  // C4: Load plan from URL hash on init
+  _loadFromHash() {
+    const hash = window.location.hash;
+    if (!hash.startsWith('#plan=')) return false;
+    try {
+      const b64 = decodeURIComponent(hash.slice(6));
+      const binary = atob(b64);
+      const bytes = Uint8Array.from(binary, c => c.charCodeAt(0));
+      const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
+      new Response(stream).text().then(json => {
+        const plan = JSON.parse(json);
+        if (plan.days) {
+          Planner.loadState(plan);
+          Scenarios.save(plan);
+          Planner.render();
+          this.toast('Plan loaded from share link', 'success');
+          window.location.hash = '';
+        }
+      });
+      return true;
+    } catch (e) {
+      return false;
+    }
   },
 
   importPlan() {
@@ -245,6 +315,69 @@ const App = {
 
     modal.classList.add('active');
     setTimeout(() => input.focus(), 100);
+  },
+
+  // C7: Trip Summary modal
+  showTripSummary() {
+    const plan = Planner.getState();
+    const modal = document.getElementById('summary-modal');
+    const body = document.getElementById('summary-body');
+
+    let html = '';
+    TRIP_DAYS.forEach(td => {
+      const day = plan.days[td.date];
+      if (!day) return;
+      const dateLabel = new Date(td.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+
+      html += `<div class="mb-4 pb-3 border-b border-white/10">
+        <div class="flex items-center gap-2 mb-1">
+          <span class="font-bold text-sm">${dateLabel}</span>
+          <span class="badge badge-pool-${td.pool.toLowerCase()}">${td.pool}</span>
+          <span class="text-[11px] text-white/40">${day.park}</span>
+          ${td.vip ? '<span class="badge badge-vip">VIP</span>' : ''}
+        </div>`;
+
+      MEAL_SLOTS.forEach(slot => {
+        const sel = day.selections[slot];
+        if (!sel) return;
+        const r = CreditEngine._getRestaurant(sel.restaurantId);
+        if (!r) return;
+
+        const adrNum = sel.adrNumber || '';
+        const method = sel.paymentMethod === 'ddp' ? `DDP ${sel.pool}` : sel.paymentMethod.toUpperCase();
+
+        html += `<div class="flex items-center gap-2 text-xs py-0.5 ml-2">
+          <span class="text-white/30 w-14">${MEAL_LABELS[slot]}</span>
+          <span class="font-medium flex-1">${r.name}</span>
+          <span class="badge ${Planner._creditBadgeClass(r.creditType)} text-[8px]">${method}</span>
+          ${adrNum ? `<span class="text-[9px] text-green-400/60">#${adrNum}</span>` : ''}
+        </div>`;
+      });
+
+      if (day.notes) {
+        html += `<div class="text-[10px] text-white/30 mt-1 ml-2">${day.notes}</div>`;
+      }
+      html += '</div>';
+    });
+
+    // OOP summary
+    const oop = CreditEngine.estimateOOPDetailed(plan);
+    const balA = CreditEngine.getBalance('A', plan);
+    const balB = CreditEngine.getBalance('B', plan);
+    html += `<div class="text-xs space-y-1">
+      <div class="font-bold">Credit Summary</div>
+      <div>Bucket A: ${balA.ts.remaining}/${balA.ts.total} TS, ${balA.qs.remaining}/${balA.qs.total} QS, ${balA.sn.remaining}/${balA.sn.total} SN</div>
+      <div>Bucket B: ${balB.ts.remaining}/${balB.ts.total} TS, ${balB.qs.remaining}/${balB.qs.total} QS, ${balB.sn.remaining}/${balB.sn.total} SN</div>
+      <div class="pt-1">Estimated OOP: <strong>$${oop.committed}</strong></div>
+    </div>`;
+
+    body.innerHTML = html;
+    modal.classList.add('active');
+    lucide.createIcons();
+  },
+
+  closeSummary() {
+    document.getElementById('summary-modal').classList.remove('active');
   },
 
   // Toast
