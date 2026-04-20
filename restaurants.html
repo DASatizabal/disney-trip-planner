@@ -120,118 +120,9 @@
   <script src="js/config.js"></script>
   <script src="js/restaurant-db.js"></script>
   <script src="js/csv-restaurants.js"></script>
+  <script src="js/restaurant-merge.js"></script>
   <script>
-    // Merge CSV + DB into a single list
-    function norm(s) {
-      return (s||'').replace(/[®™©''""–—\-]/g,'').replace(/[^a-z0-9 ]/gi,'').toLowerCase().trim().replace(/ +/g,' ');
-    }
-
-    // Build DB lookup
-    const dbMap = new Map();
-    RESTAURANTS.forEach(r => {
-      dbMap.set(norm(r.name.replace(/ \(.*\)/,'')), r);
-    });
-
-    // Start with CSV as master
-    const allRestaurants = [];
-    const csvMatched = new Set();
-
-    CSV_RESTAURANTS.forEach(csv => {
-      const key = norm(csv.name);
-      let db = dbMap.get(key);
-      if (!db) {
-        for (const [dk, dr] of dbMap) {
-          if (dk.includes(key) || key.includes(dk)) { db = dr; break; }
-        }
-      }
-
-      const priceTier = csv.price.startsWith('$$$$') ? '$$$$' : csv.price.startsWith('$$$') ? '$$$' : csv.price.startsWith('$$') ? '$$' : csv.price.startsWith('$') ? '$' : '';
-
-      allRestaurants.push({
-        name: csv.name,
-        type: csv.type || (db ? db.category.replace('_',' ') : ''),
-        location: csv.location,
-        style: csv.style,
-        cuisine: db ? db.cuisine : extractCuisine(csv.price, csv.style),
-        price: csv.price,
-        priceTier,
-        reservation: csv.reservation === 'Y',
-        // DB enrichment
-        dbId: db ? db.id : null,
-        creditType: db ? db.creditType : null,
-        creditsConsumed: db ? db.creditsConsumed : null,
-        acceptsDDP: db ? db.acceptsDDP : null,
-        isCharacter: db ? db.isCharacter : false,
-        characterNames: db ? db.characterNames : null,
-        isBuffet: db ? db.isBuffet : false,
-        isSignature: db ? db.isSignature : false,
-        isDinnerShow: db ? db.isDinnerShow : false,
-        isLounge: db ? db.isLounge : false,
-        seafoodWarning: db ? db.seafoodWarning : false,
-        seafoodNotes: db ? db.seafoodNotes : null,
-        vipDiscountPct: db ? db.vipDiscountPct : 0,
-        vipDiscountMeals: db ? db.vipDiscountMeals : [],
-        familyReview: db ? db.familyReview : null,
-        familyBeenBefore: db ? db.familyBeenBefore : false,
-        ddpValue: db ? db.ddpValue : null,
-        notes: db ? db.notes : null,
-        apDiscountPct: db ? db.apDiscountPct : 0,
-      });
-
-      if (db) csvMatched.add(db.id);
-    });
-
-    // Add DB entries not in CSV
-    RESTAURANTS.forEach(r => {
-      if (csvMatched.has(r.id)) return;
-      const priceTier = r.avgAdultPrice > 60 ? '$$$$' : r.avgAdultPrice > 35 ? '$$$' : r.avgAdultPrice > 15 ? '$$' : '$';
-      allRestaurants.push({
-        name: r.name,
-        type: r.category === 'table_service' ? 'Table Service' : r.category === 'quick_service' ? 'Quick Service' : r.category === 'snack' ? 'Quick Service' : 'Table Service',
-        location: r.location,
-        style: '',
-        cuisine: r.cuisine,
-        price: '',
-        priceTier,
-        reservation: false,
-        dbId: r.id,
-        creditType: r.creditType,
-        creditsConsumed: r.creditsConsumed,
-        acceptsDDP: r.acceptsDDP,
-        isCharacter: r.isCharacter,
-        characterNames: r.characterNames,
-        isBuffet: r.isBuffet,
-        isSignature: r.isSignature,
-        isDinnerShow: r.isDinnerShow,
-        isLounge: r.isLounge,
-        seafoodWarning: r.seafoodWarning,
-        seafoodNotes: r.seafoodNotes,
-        vipDiscountPct: r.vipDiscountPct,
-        vipDiscountMeals: r.vipDiscountMeals,
-        familyReview: r.familyReview,
-        familyBeenBefore: r.familyBeenBefore,
-        ddpValue: r.ddpValue,
-        notes: r.notes,
-        apDiscountPct: r.apDiscountPct,
-      });
-    });
-
-    function extractCuisine(price, style) {
-      const parts = [];
-      if (price) {
-        const m = price.match(/\),\s*(.+)/);
-        if (m) parts.push(...m[1].split(',').map(s=>s.trim()));
-      }
-      if (!parts.length && style) {
-        const tags = style.split(',').map(s=>s.trim()).filter(s =>
-          !['a la Carte','Buffet','Character Dining','Casual Dining','Fine/Signature Dining','Quick Service Restaurant',
-           'Mobile Orders','Bar-Lounge','Pool Bar','Snack','Quick Service Kiosk','Quick Service - Coffee','Bakery',
-           'Dinner Shows','Family Style','Dining Events','Reservations Accepted','Festival Kiosk','Prix Fixe',
-           'Quick Service'].includes(s));
-        if (tags.length) parts.push(...tags);
-      }
-      return parts.join(', ') || null;
-    }
+    const allRestaurants = RestaurantMerge.getMerged();
 
     // Populate location filter
     const locations = [...new Set(allRestaurants.map(r=>r.location).filter(Boolean))].sort();
@@ -295,6 +186,8 @@
           : '<span class="text-white/20">—</span>';
 
         const flags = [];
+        if (r.closed) flags.push('<span class="badge" style="background:rgba(100,100,100,0.2);color:#999;border:1px solid rgba(100,100,100,0.3)">CLOSED</span>');
+        if (r.csvOnly) flags.push('<span class="badge" style="background:rgba(255,255,255,0.05);color:rgba(255,255,255,0.25);border:1px solid rgba(255,255,255,0.08);font-style:italic">undetailed</span>');
         if (r.seafoodWarning) flags.push('<span class="badge badge-seafood" title="Seafood - Lisa">SEAFOOD</span>');
         if (r.isCharacter) flags.push('<span class="badge badge-character" title="'+((r.characterNames||'Characters'))+'">CHARS</span>');
         if (r.vipDiscountPct > 0) flags.push('<span class="badge badge-vip">'+r.vipDiscountPct+'% VIP</span>');

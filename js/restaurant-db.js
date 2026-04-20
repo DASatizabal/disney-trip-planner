@@ -843,7 +843,7 @@ const RESTAURANTS = [
   // ============================================================
   {
     id: 26,
-    name: 'Space 220 Restaurant',
+    name: 'Space 220 Restaurant (Lunch)',
     creditType: 'OOP',
     creditsConsumed: 0,
     creditCategory: 'oop',
@@ -851,8 +851,8 @@ const RESTAURANTS = [
     location: 'EPCOT',
     parkArea: 'World Discovery',
     cuisine: 'Modern American',
-    meals: ['lunch', 'dinner'],
-    avgAdultPrice: 67,
+    meals: ['lunch'],
+    avgAdultPrice: 55,
     avgKidPrice: 29,
     isCharacter: false,
     characterNames: null,
@@ -862,7 +862,7 @@ const RESTAURANTS = [
     isLounge: false,
     acceptsDDP: false,
     apDiscountPct: 10,
-    apDiscountNotes: 'Lunch only',
+    apDiscountNotes: 'AP 10% at lunch only',
     vipDiscountPct: 0,
     vipDiscountMeals: [],
     vipDiscountNotes: null,
@@ -872,7 +872,40 @@ const RESTAURANTS = [
     familyBeenBefore: false,
     familyReview: null,
     ddpValue: 'n/a',
-    notes: 'Prix fixe: ~$55 lunch, ~$79 dinner. Space station themed with simulated elevator ride'
+    notes: 'NOT on DDP. Prix fixe ~$55/adult. Space elevator experience.'
+  },
+  {
+    id: 223,
+    name: 'Space 220 Restaurant (Dinner)',
+    creditType: 'OOP',
+    creditsConsumed: 0,
+    creditCategory: 'oop',
+    category: 'out_of_pocket',
+    location: 'EPCOT',
+    parkArea: 'World Discovery',
+    cuisine: 'Modern American',
+    meals: ['dinner'],
+    avgAdultPrice: 79,
+    avgKidPrice: 35,
+    isCharacter: false,
+    characterNames: null,
+    isBuffet: false,
+    isSignature: false,
+    isDinnerShow: false,
+    isLounge: false,
+    acceptsDDP: false,
+    apDiscountPct: 0,
+    apDiscountNotes: 'No AP discount at dinner',
+    vipDiscountPct: 0,
+    vipDiscountMeals: [],
+    vipDiscountNotes: null,
+    seafoodWarning: false,
+    seafoodNotes: null,
+    mobileOrder: false,
+    familyBeenBefore: false,
+    familyReview: null,
+    ddpValue: 'n/a',
+    notes: 'NOT on DDP. Prix fixe ~$79/adult. No AP discount at dinner.'
   },
   {
     id: 27,
@@ -6283,7 +6316,7 @@ const RESTAURANTS = [
   // ===== ADDITIONS: BoardWalk Resort QS/Snacks =====
 
   { id: 194, name: 'BoardWalk Deli', creditType: 'QS', creditsConsumed: 1, creditCategory: 'qs', category: 'quick_service', location: 'BoardWalk Inn', parkArea: null, cuisine: 'American', meals: ['breakfast', 'lunch', 'dinner'], avgAdultPrice: 14, avgKidPrice: 10, isCharacter: false, characterNames: null, isBuffet: false, isSignature: false, isDinnerShow: false, isLounge: false, acceptsDDP: true, apDiscountPct: 0, apDiscountNotes: null, vipDiscountPct: 0, vipDiscountMeals: [], vipDiscountNotes: null, seafoodWarning: false, seafoodNotes: null, mobileOrder: true, familyBeenBefore: false, familyReview: null, ddpValue: 'fair', notes: 'BoardWalk resort food court/deli. Sandwiches, pastries.' },
-  { id: 195, name: 'BoardWalk Pizza Window', creditType: 'QS', creditsConsumed: 1, creditCategory: 'qs', category: 'quick_service', location: 'BoardWalk Inn', parkArea: null, cuisine: 'Italian', meals: ['lunch', 'dinner'], avgAdultPrice: 12, avgKidPrice: 8, isCharacter: false, characterNames: null, isBuffet: false, isSignature: false, isDinnerShow: false, isLounge: false, acceptsDDP: true, apDiscountPct: 0, apDiscountNotes: null, vipDiscountPct: 0, vipDiscountMeals: [], vipDiscountNotes: null, seafoodWarning: false, seafoodNotes: null, mobileOrder: false, familyBeenBefore: false, familyReview: null, ddpValue: 'fair', notes: 'Walk-up window. Pizza slices on the BoardWalk.' },
+  { id: 195, name: 'BoardWalk Pizza Window', creditType: 'QS', creditsConsumed: 1, creditCategory: 'qs', category: 'quick_service', location: 'BoardWalk Inn', parkArea: null, cuisine: 'Italian', meals: ['lunch', 'dinner'], avgAdultPrice: 12, avgKidPrice: 8, isCharacter: false, characterNames: null, isBuffet: false, isSignature: false, isDinnerShow: false, isLounge: false, acceptsDDP: true, apDiscountPct: 0, apDiscountNotes: null, vipDiscountPct: 0, vipDiscountMeals: [], vipDiscountNotes: null, seafoodWarning: false, seafoodNotes: null, mobileOrder: false, familyBeenBefore: false, familyReview: null, ddpValue: 'fair', notes: 'Walk-up window. Pizza slices + famous fried mozzarella sticks! Great late-night snack spot.' },
   { id: 196, name: 'The Cake Bake Shop Bakery', creditType: 'QS', creditsConsumed: 1, creditCategory: 'qs', category: 'quick_service', location: 'BoardWalk Inn', parkArea: null, cuisine: 'American', meals: ['breakfast', 'lunch'], avgAdultPrice: 14, avgKidPrice: 10, isCharacter: false, characterNames: null, isBuffet: false, isSignature: false, isDinnerShow: false, isLounge: false, acceptsDDP: true, apDiscountPct: 0, apDiscountNotes: null, vipDiscountPct: 0, vipDiscountMeals: [], vipDiscountNotes: null, seafoodWarning: false, seafoodNotes: null, mobileOrder: true, familyBeenBefore: false, familyReview: null, ddpValue: 'good', notes: 'QS bakery counter. Incredible cakes, pastries, cookies.' },
 
   // ===== ADDITIONS: Polynesian Village QS =====
@@ -6297,7 +6330,6 @@ const RESTAURANTS = [
 
   // ===== ADDITIONS: More Snack Kiosks =====
 
-  { id: 200, name: 'Gaston\'s Tavern', creditType: 'SN', creditsConsumed: 1, creditCategory: 'sn', category: 'snack', location: 'Magic Kingdom', parkArea: 'Fantasyland', cuisine: 'American', meals: ['snack'], avgAdultPrice: 8, avgKidPrice: null, isCharacter: false, characterNames: null, isBuffet: false, isSignature: false, isDinnerShow: false, isLounge: false, acceptsDDP: true, apDiscountPct: 0, apDiscountNotes: null, vipDiscountPct: 0, vipDiscountMeals: [], vipDiscountNotes: null, seafoodWarning: false, seafoodNotes: null, mobileOrder: true, familyBeenBefore: false, familyReview: null, ddpValue: 'good', notes: 'LeFou\'s Brew! Frozen apple drink with mango foam. Cinnamon rolls too.' },
   { id: 201, name: 'Sunshine Tree Terrace', creditType: 'SN', creditsConsumed: 1, creditCategory: 'sn', category: 'snack', location: 'Magic Kingdom', parkArea: 'Adventureland', cuisine: 'Dessert', meals: ['snack'], avgAdultPrice: 7, avgKidPrice: null, isCharacter: false, characterNames: null, isBuffet: false, isSignature: false, isDinnerShow: false, isLounge: false, acceptsDDP: true, apDiscountPct: 0, apDiscountNotes: null, vipDiscountPct: 0, vipDiscountMeals: [], vipDiscountNotes: null, seafoodWarning: false, seafoodNotes: null, mobileOrder: true, familyBeenBefore: false, familyReview: null, ddpValue: 'good', notes: 'Citrus Swirl! Orange soft serve with vanilla. Classic MK snack.' },
   { id: 202, name: 'Storybook Treats', creditType: 'SN', creditsConsumed: 1, creditCategory: 'sn', category: 'snack', location: 'Magic Kingdom', parkArea: 'Fantasyland', cuisine: 'Dessert', meals: ['snack'], avgAdultPrice: 7, avgKidPrice: null, isCharacter: false, characterNames: null, isBuffet: false, isSignature: false, isDinnerShow: false, isLounge: false, acceptsDDP: true, apDiscountPct: 0, apDiscountNotes: null, vipDiscountPct: 0, vipDiscountMeals: [], vipDiscountNotes: null, seafoodWarning: false, seafoodNotes: null, mobileOrder: true, familyBeenBefore: false, familyReview: null, ddpValue: 'good', notes: 'Soft serve, floats, sundaes. Near the Fantasyland rides.' },
   { id: 203, name: 'Plaza Ice Cream Parlor', creditType: 'SN', creditsConsumed: 1, creditCategory: 'sn', category: 'snack', location: 'Magic Kingdom', parkArea: 'Main Street U.S.A.', cuisine: 'Dessert', meals: ['snack'], avgAdultPrice: 7, avgKidPrice: null, isCharacter: false, characterNames: null, isBuffet: false, isSignature: false, isDinnerShow: false, isLounge: false, acceptsDDP: true, apDiscountPct: 0, apDiscountNotes: null, vipDiscountPct: 0, vipDiscountMeals: [], vipDiscountNotes: null, seafoodWarning: false, seafoodNotes: null, mobileOrder: false, familyBeenBefore: false, familyReview: null, ddpValue: 'good', notes: 'Hand-scooped ice cream on Main Street. Great end-of-night snack credit.' },
@@ -6316,7 +6348,6 @@ const RESTAURANTS = [
   // ===== ADDITIONS: Famous Individual Snack Items =====
 
   { id: 215, name: 'Beignets (Scat Cat\'s Club Cafe)', creditType: 'SN', creditsConsumed: 1, creditCategory: 'sn', category: 'snack', location: 'Port Orleans French Quarter', parkArea: null, cuisine: 'Cajun/Dessert', meals: ['snack'], avgAdultPrice: 6, avgKidPrice: null, isCharacter: false, characterNames: null, isBuffet: false, isSignature: false, isDinnerShow: false, isLounge: false, acceptsDDP: true, apDiscountPct: 0, apDiscountNotes: null, vipDiscountPct: 0, vipDiscountMeals: [], vipDiscountNotes: null, seafoodWarning: false, seafoodNotes: null, mobileOrder: true, familyBeenBefore: false, familyReview: null, ddpValue: 'good', notes: 'Fresh hot beignets with powdered sugar! New Orleans classic. No park needed.' },
-  { id: 216, name: 'Fried Mozzarella Sticks (BoardWalk Pizza Window)', creditType: 'SN', creditsConsumed: 1, creditCategory: 'sn', category: 'snack', location: 'BoardWalk Inn', parkArea: null, cuisine: 'Italian', meals: ['snack'], avgAdultPrice: 9, avgKidPrice: null, isCharacter: false, characterNames: null, isBuffet: false, isSignature: false, isDinnerShow: false, isLounge: false, acceptsDDP: true, apDiscountPct: 0, apDiscountNotes: null, vipDiscountPct: 0, vipDiscountMeals: [], vipDiscountNotes: null, seafoodWarning: false, seafoodNotes: null, mobileOrder: false, familyBeenBefore: false, familyReview: null, ddpValue: 'good', notes: 'Deep fried mozzarella sticks from the BoardWalk Pizza Window. Late night snack!' },
   { id: 217, name: 'LeFou\'s Brew (Gaston\'s Tavern)', creditType: 'SN', creditsConsumed: 1, creditCategory: 'sn', category: 'snack', location: 'Magic Kingdom', parkArea: 'Fantasyland', cuisine: 'Dessert', meals: ['snack'], avgAdultPrice: 7, avgKidPrice: null, isCharacter: false, characterNames: null, isBuffet: false, isSignature: false, isDinnerShow: false, isLounge: false, acceptsDDP: true, apDiscountPct: 0, apDiscountNotes: null, vipDiscountPct: 0, vipDiscountMeals: [], vipDiscountNotes: null, seafoodWarning: false, seafoodNotes: null, mobileOrder: true, familyBeenBefore: false, familyReview: null, ddpValue: 'good', notes: 'Frozen apple drink with mango passion fruit foam. A must-try MK drink!' },
   { id: 218, name: 'Tonga Toast (Capt. Cook\'s)', creditType: 'SN', creditsConsumed: 1, creditCategory: 'sn', category: 'snack', location: 'Polynesian Village', parkArea: null, cuisine: 'Polynesian', meals: ['snack'], avgAdultPrice: 11, avgKidPrice: null, isCharacter: false, characterNames: null, isBuffet: false, isSignature: false, isDinnerShow: false, isLounge: false, acceptsDDP: true, apDiscountPct: 0, apDiscountNotes: null, vipDiscountPct: 0, vipDiscountMeals: [], vipDiscountNotes: null, seafoodWarning: false, seafoodNotes: null, mobileOrder: true, familyBeenBefore: false, familyReview: null, ddpValue: 'excellent', notes: 'Banana-stuffed, deep-fried sourdough French toast with cinnamon sugar. Legendary breakfast snack!' },
   { id: 219, name: 'Citrus Swirl (Sunshine Tree Terrace)', creditType: 'SN', creditsConsumed: 1, creditCategory: 'sn', category: 'snack', location: 'Magic Kingdom', parkArea: 'Adventureland', cuisine: 'Dessert', meals: ['snack'], avgAdultPrice: 7, avgKidPrice: null, isCharacter: false, characterNames: null, isBuffet: false, isSignature: false, isDinnerShow: false, isLounge: false, acceptsDDP: true, apDiscountPct: 0, apDiscountNotes: null, vipDiscountPct: 0, vipDiscountMeals: [], vipDiscountNotes: null, seafoodWarning: false, seafoodNotes: null, mobileOrder: true, familyBeenBefore: false, familyReview: null, ddpValue: 'good', notes: 'Orange vanilla swirl soft serve. Classic MK snack since 1971!' },

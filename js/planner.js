@@ -147,7 +147,12 @@ const Planner = {
       `;
     }
 
-    const r = CreditEngine._getRestaurant(sel.restaurantId);
+    let r = CreditEngine._getRestaurant(sel.restaurantId);
+    // Fallback for CSV-only entries (string IDs)
+    if (!r && typeof sel.restaurantId === 'string') {
+      const name = sel.restaurantId.replace(/^_csv_/, '').replace(/_/g, ' ');
+      r = RestaurantMerge.findByName(name);
+    }
     if (!r) return '';
 
     const badgeClass = this._creditBadgeClass(r.creditType);

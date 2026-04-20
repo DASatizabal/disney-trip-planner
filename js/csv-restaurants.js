@@ -259,7 +259,7 @@ const CSV_RESTAURANTS = [
   {"style":"American, Snack","name":"Pineapple Lanai","type":"Quick Service","location":"Disney's Polynesian Village Resort","price":"$ ($14.99 and under per adult), American","reservation":"N"},
   {"style":"American, Quick Service Restaurant","name":"Pinocchio Village Haus","type":"Quick Service","location":"Magic Kingdom Park","price":"$ ($14.99 and under per adult), American","reservation":"N"},
   {"style":"Italian, Quick Service Kiosk","name":"Pizza al Taglio","type":"Quick Service","location":"EPCOT","price":"","reservation":"N"},
-  {"style":"Italian","name":"A slice of Sicilian style pepperoni pizza","type":"Quick Service Restaurant, Italian","location":"Disney Springs","price":"$ ($14.99 and under per adult), Italian","reservation":"N"},
+  {"style":"Quick Service Restaurant, Italian","name":"Pizza Ponte","type":"Quick Service","location":"Disney Springs","price":"$ ($14.99 and under per adult), Italian","reservation":"N"},
   {"style":"American, Quick Service Kiosk","name":"Pizza Window","type":"Quick Service","location":"Disney's BoardWalk","price":"$ ($14.99 and under per adult), American","reservation":"N"},
   {"style":"American, Quick Service Restaurant","name":"Pizzafari","type":"Quick Service","location":"Disney's Animal Kingdom Theme Park","price":"$ ($14.99 and under per adult), American","reservation":"N"},
   {"style":"a la Carte, American","name":"Planet Hollywood®","type":"Table Service","location":"Disney Springs","price":"$$ ($15 to $34.99 per adult), American","reservation":"Y"},

@@ -17,10 +17,7 @@ const RestaurantPicker = {
     const dateLabel = new Date(dayDate + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
     document.getElementById('picker-context').textContent = `${dateLabel} — ${MEAL_LABELS[mealSlot]} — ${day.park}`;
 
-    // Populate location filter with smart default
     this._populateLocationFilter(day);
-
-    // Populate cuisine filter
     this._populateCuisineFilter();
 
     // Set default type filter based on meal slot
@@ -31,19 +28,11 @@ const RestaurantPicker = {
       typeFilter.value = 'all';
     }
 
-    // Clear search
     document.getElementById('picker-search').value = '';
-
-    // Render results
     this.applyFilters();
-
-    // Show modal
     document.getElementById('picker-modal').classList.add('active');
-
-    // Focus search
     setTimeout(() => document.getElementById('picker-search').focus(), 100);
 
-    // Bind search with debounce
     const searchInput = document.getElementById('picker-search');
     searchInput.oninput = () => {
       clearTimeout(this._debounceTimer);
@@ -55,20 +44,24 @@ const RestaurantPicker = {
     document.getElementById('picker-modal').classList.remove('active');
   },
 
+  _getAllRestaurants() {
+    return RestaurantMerge.getMerged();
+  },
+
   _populateLocationFilter(day) {
+    const all = this._getAllRestaurants();
     const sel = document.getElementById('filter-location');
-    const locations = [...new Set(RESTAURANTS.map(r => r.location))].sort();
+    const locations = [...new Set(all.map(r => r.location).filter(Boolean))].sort();
     sel.innerHTML = '<option value="all">All Locations</option>';
 
-    // Smart default: match the day's park
     const dayPark = day.splitDay && day.splitParks
       ? (this._mealSlot === 'dinner' || this._mealSlot.startsWith('snack3') || this._mealSlot.startsWith('snack4')
         ? day.splitParks.pm : day.splitParks.am)
       : day.park;
 
-    // Group by park/springs/resorts
-    const parks = ['Magic Kingdom', 'EPCOT', 'Hollywood Studios', 'Animal Kingdom', 'Disney Springs'];
-    const waterParks = locations.filter(l => l.startsWith('Water Park'));
+    const parks = ['Magic Kingdom', 'Magic Kingdom Park', 'EPCOT', 'Hollywood Studios', "Disney's Hollywood Studios",
+      'Animal Kingdom', "Disney's Animal Kingdom Theme Park", 'Disney Springs'];
+    const waterParks = locations.filter(l => l.includes('Water Park') || l.includes('Blizzard') || l.includes('Typhoon'));
     const resorts = locations.filter(l => !parks.includes(l) && !waterParks.includes(l));
 
     const addGroup = (label, locs) => {
@@ -85,21 +78,22 @@ const RestaurantPicker = {
     };
 
     addGroup('Parks', parks.filter(p => locations.includes(p)));
-    addGroup('Disney Springs', ['Disney Springs'].filter(p => locations.includes(p)));
     addGroup('Water Parks', waterParks);
     addGroup('Resorts', resorts);
 
-    // Default to the day's park if it's a real park
     if (dayPark && dayPark !== 'none' && !dayPark.startsWith('Resort') && !dayPark.startsWith('Travel') && !dayPark.startsWith('Split')) {
-      sel.value = dayPark;
+      // Try exact match or partial match for the day's park
+      const match = locations.find(l => l === dayPark || l.includes(dayPark) || dayPark.includes(l));
+      sel.value = match || 'all';
     } else {
       sel.value = 'all';
     }
   },
 
   _populateCuisineFilter() {
+    const all = this._getAllRestaurants();
     const sel = document.getElementById('filter-cuisine');
-    const cuisines = [...new Set(RESTAURANTS.map(r => r.cuisine).filter(Boolean))].sort();
+    const cuisines = [...new Set(all.map(r => r.cuisine).filter(Boolean))].sort();
     sel.innerHTML = '<option value="all">All Cuisines</option>';
     cuisines.forEach(c => {
       const opt = document.createElement('option');
@@ -116,7 +110,7 @@ const RestaurantPicker = {
     const search = (document.getElementById('picker-search').value || '').toLowerCase().trim();
     const mealName = CreditEngine.slotToMeal(this._mealSlot);
 
-    let results = RESTAURANTS;
+    let results = this._getAllRestaurants();
 
     // Filter by meal period
     if (mealName === 'snack') {
@@ -125,22 +119,19 @@ const RestaurantPicker = {
       results = results.filter(r => r.meals.includes(mealName));
     }
 
-    // Filter by location
+    // Filter by location (fuzzy — CSV uses "Magic Kingdom Park", DB uses "Magic Kingdom")
     if (location !== 'all') {
       results = results.filter(r => r.location === location);
     }
 
-    // Filter by credit type
     if (type !== 'all') {
       results = results.filter(r => r.creditType === type);
     }
 
-    // Filter by cuisine
     if (cuisine !== 'all') {
       results = results.filter(r => r.cuisine === cuisine);
     }
 
-    // Text search
     if (search) {
       results = results.filter(r =>
         r.name.toLowerCase().includes(search) ||
@@ -152,22 +143,25 @@ const RestaurantPicker = {
       );
     }
 
-    // Sort: family favorites first, then by value, then alphabetical
+    // Sort: closed last, skip last, family favorites first, then value, then alpha
+    const reviewKey = (r) => r.familyReview || '_none';
+    const reviewOrder = { loved: 0, liked: 1, _none: 2, skip: 3 };
     results.sort((a, b) => {
-      // Skip items last
-      if (a.familyReview === 'skip' && b.familyReview !== 'skip') return 1;
-      if (b.familyReview === 'skip' && a.familyReview !== 'skip') return -1;
-      // Loved/liked first
-      const reviewOrder = { loved: 0, liked: 1, null: 2, skip: 3 };
-      const aR = reviewOrder[a.familyReview] ?? 2;
-      const bR = reviewOrder[b.familyReview] ?? 2;
+      // Closed items at bottom
+      if (a.closed && !b.closed) return 1;
+      if (b.closed && !a.closed) return -1;
+      // Skip items near bottom
+      const aR = reviewOrder[reviewKey(a)] ?? 2;
+      const bR = reviewOrder[reviewKey(b)] ?? 2;
       if (aR !== bR) return aR - bR;
+      // DB-enriched before CSV-only
+      if (a.csvOnly && !b.csvOnly) return 1;
+      if (b.csvOnly && !a.csvOnly) return -1;
       // Value rating
       const valueOrder = { excellent: 0, good: 1, fair: 2, poor: 3, 'n/a': 4 };
       const aV = valueOrder[a.ddpValue] ?? 4;
       const bV = valueOrder[b.ddpValue] ?? 4;
       if (aV !== bV) return aV - bV;
-      // Alphabetical
       return a.name.localeCompare(b.name);
     });
 
@@ -179,28 +173,34 @@ const RestaurantPicker = {
 
     const container = document.getElementById('picker-results');
     if (results.length === 0) {
-      container.innerHTML = '<div class="text-center text-white/30 text-sm py-8">No restaurants match your filters</div>';
+      container.innerHTML = `<div class="text-center text-sm py-8">
+        <div class="text-white/30 mb-2">No restaurants match your filters</div>
+        <button onclick="RestaurantPicker._clearFilters()" class="text-amber-400 hover:text-amber-300 text-xs">Clear Filters</button>
+      </div>`;
       return;
     }
 
-    const td = TRIP_DAYS.find(d => d.date === this._dayDate);
-
     container.innerHTML = results.map(r => {
       const badgeClass = this._creditBadgeClass(r.creditType);
-      const vip = CreditEngine.getVIPInfo(r.id, this._dayDate, this._mealSlot);
+      const vip = r.id ? CreditEngine.getVIPInfo(r.id, this._dayDate, this._mealSlot) : { available: false };
       const valueStars = this._valueStars(r.ddpValue);
+      const selectAttr = r.closed
+        ? 'style="opacity:0.4;pointer-events:none;"'
+        : `onclick="RestaurantPicker.selectRestaurant(${r.id ? r.id : "null"}, '${r.name.replace(/'/g, "\\'")}')"`;
 
       return `
-        <div class="restaurant-card" onclick="RestaurantPicker.selectRestaurant(${r.id})">
+        <div class="restaurant-card" ${selectAttr}>
           <div class="flex items-start justify-between gap-2">
             <div class="min-w-0 flex-1">
               <div class="text-sm font-medium">${r.name}</div>
-              <div class="text-[11px] text-white/40 mt-0.5">${r.location}${r.parkArea ? ' — ' + r.parkArea : ''}</div>
+              <div class="text-[11px] text-white/40 mt-0.5">${r.location || ''}${r.parkArea ? ' — ' + r.parkArea : ''}</div>
               <div class="flex items-center gap-1 mt-1 flex-wrap">
                 <span class="badge ${badgeClass}">${r.creditType}</span>
+                ${r.closed ? '<span class="badge" style="background:rgba(100,100,100,0.2);color:#999;border:1px solid rgba(100,100,100,0.3)">CLOSED</span>' : ''}
+                ${r.csvOnly ? '<span class="badge" style="background:rgba(255,255,255,0.05);color:rgba(255,255,255,0.25);border:1px solid rgba(255,255,255,0.08);font-style:italic">undetailed</span>' : ''}
                 ${r.cuisine ? `<span class="text-[10px] text-white/30">${r.cuisine}</span>` : ''}
                 ${r.seafoodWarning ? '<span class="badge badge-seafood">SEAFOOD</span>' : ''}
-                ${r.isCharacter ? `<span class="badge badge-character">CHARS</span>` : ''}
+                ${r.isCharacter ? '<span class="badge badge-character">CHARS</span>' : ''}
                 ${r.isBuffet ? '<span class="text-[10px] text-white/30">Buffet/AYCE</span>' : ''}
                 ${r.familyReview === 'loved' ? '<span class="badge badge-loved">LOVED</span>' : ''}
                 ${r.familyReview === 'liked' ? '<span class="badge badge-loved">LIKED</span>' : ''}
@@ -222,9 +222,17 @@ const RestaurantPicker = {
     lucide.createIcons();
   },
 
+  _clearFilters() {
+    document.getElementById('filter-location').value = 'all';
+    document.getElementById('filter-type').value = 'all';
+    document.getElementById('filter-cuisine').value = 'all';
+    document.getElementById('picker-search').value = '';
+    this.applyFilters();
+  },
+
   _creditBadgeClass(creditType) {
     const map = { '1TS': 'badge-ts', '2TS': 'badge-2ts', 'QS': 'badge-qs', 'SN': 'badge-sn', 'OOP': 'badge-oop' };
-    return map[creditType] || 'badge-ts';
+    return map[creditType] || 'badge-oop';
   },
 
   _valueStars(value) {
@@ -233,35 +241,47 @@ const RestaurantPicker = {
   },
 
   // Selection flow
-  selectRestaurant(restaurantId) {
-    const r = CreditEngine._getRestaurant(restaurantId);
+  selectRestaurant(restaurantId, restaurantName) {
+    // For CSV-only entries (no DB id), find by name and use inferred credit info
+    let r;
+    if (restaurantId) {
+      r = CreditEngine._getRestaurant(restaurantId);
+    }
+    if (!r && restaurantName) {
+      // CSV-only: use merged entry data
+      const merged = RestaurantMerge.findByName(restaurantName);
+      if (merged) {
+        r = merged;
+        // CSV-only entries get a temporary id for the selection
+        if (!r.id) {
+          r._tempId = '_csv_' + restaurantName.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+        }
+      }
+    }
     if (!r) return;
 
     this.close();
 
     const td = TRIP_DAYS.find(d => d.date === this._dayDate);
-    const vip = CreditEngine.getVIPInfo(restaurantId, this._dayDate, this._mealSlot);
+    const vip = r.id ? CreditEngine.getVIPInfo(r.id, this._dayDate, this._mealSlot) : { available: false };
 
     if (!r.acceptsDDP || r.creditType === 'OOP') {
-      // OOP only
-      this._finalizeSelection(restaurantId, 'oop', null);
+      this._finalizeSelection(r.id || r._tempId, 'oop', null);
       return;
     }
 
     if (vip.available) {
-      // Show VIP prompt
       this._showPaymentModal(r, vip);
       return;
     }
 
-    // DDP eligible, check for June 8 overlap
     const pools = CreditEngine.getPoolsForDate(this._dayDate);
     if (pools.length > 1) {
-      this._showPoolModal(restaurantId, 'ddp', pools);
+      this._showPoolModal(r.id || r._tempId, 'ddp', pools);
       return;
     }
 
-    this._finalizeSelection(restaurantId, 'ddp', pools[0]);
+    this._finalizeSelection(r.id || r._tempId, 'ddp', pools[0]);
   },
 
   _showPaymentModal(restaurant, vipInfo) {
@@ -270,21 +290,20 @@ const RestaurantPicker = {
     document.getElementById('payment-context').textContent =
       `${vipInfo.pct}% V.I.PASSHOLDER discount available! Estimated savings: ~$${vipInfo.estimatedSavings}`;
 
-    const pools = CreditEngine.getPoolsForDate(this._dayDate);
-    const restaurantId = restaurant.id;
+    const rid = restaurant.id || restaurant._tempId;
 
     let options = `
-      <button onclick="RestaurantPicker._onPaymentChoice(${restaurantId}, 'vip')"
+      <button onclick="RestaurantPicker._onPaymentChoice(${typeof rid === 'number' ? rid : "'" + rid + "'"}, 'vip')"
         class="w-full text-left p-3 rounded-lg border border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 transition-colors">
         <div class="text-sm font-medium text-amber-300">Use ${vipInfo.pct}% VIP Discount</div>
         <div class="text-[11px] text-white/40 mt-0.5">Pay OOP ~$${Math.round((restaurant.avgAdultPrice || 40) * 3 * (1 - vipInfo.pct / 100))} and save your DDP credit</div>
       </button>
-      <button onclick="RestaurantPicker._onPaymentChoice(${restaurantId}, 'ddp')"
+      <button onclick="RestaurantPicker._onPaymentChoice(${typeof rid === 'number' ? rid : "'" + rid + "'"}, 'ddp')"
         class="w-full text-left p-3 rounded-lg border border-white/10 hover:bg-white/5 transition-colors">
         <div class="text-sm font-medium">Use DDP Credit</div>
-        <div class="text-[11px] text-white/40 mt-0.5">${restaurant.creditsConsumed} ${restaurant.creditCategory.toUpperCase()} credit${restaurant.creditsConsumed > 1 ? 's' : ''}</div>
+        <div class="text-[11px] text-white/40 mt-0.5">${restaurant.creditsConsumed} ${(restaurant.creditCategory || 'ts').toUpperCase()} credit${restaurant.creditsConsumed > 1 ? 's' : ''}</div>
       </button>
-      <button onclick="RestaurantPicker._onPaymentChoice(${restaurantId}, 'oop')"
+      <button onclick="RestaurantPicker._onPaymentChoice(${typeof rid === 'number' ? rid : "'" + rid + "'"}, 'oop')"
         class="w-full text-left p-3 rounded-lg border border-white/10 hover:bg-white/5 transition-colors">
         <div class="text-sm font-medium text-white/60">Pay Out of Pocket</div>
         <div class="text-[11px] text-white/40 mt-0.5">No discount, no DDP credit</div>
@@ -317,13 +336,13 @@ const RestaurantPicker = {
 
     const options = pools.map(poolId => {
       const balance = CreditEngine.getBalance(poolId, planState);
-      const r = CreditEngine._getRestaurant(restaurantId);
-      const cat = r.creditCategory;
+      const r = typeof restaurantId === 'number' ? CreditEngine._getRestaurant(restaurantId) : null;
+      const cat = r ? r.creditCategory : 'ts';
       const remaining = balance[cat].remaining;
       const pool = POOLS[poolId];
 
       return `
-        <button onclick="RestaurantPicker._onPoolChoice(${restaurantId}, '${paymentMethod}', '${poolId}')"
+        <button onclick="RestaurantPicker._onPoolChoice(${typeof restaurantId === 'number' ? restaurantId : "'" + restaurantId + "'"}, '${paymentMethod}', '${poolId}')"
           class="w-full text-left p-3 rounded-lg border border-white/10 hover:bg-white/5 transition-colors">
           <div class="flex items-center gap-2">
             <span class="badge badge-pool-${poolId.toLowerCase()}">Bucket ${poolId}</span>
