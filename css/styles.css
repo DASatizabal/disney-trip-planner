@@ -39,7 +39,7 @@ body.light-mode .glass-card-darker {
 }
 
 body.light-mode .text-white { color: #1e293b !important; }
-body.light-mode .text-white\/60 { color: rgba(30, 41, 59, 0.6) !important; }
+body.light-mode .text-white\/60 { color: rgba(30, 41, 59, 0.75) !important; }
 body.light-mode .text-white\/80 { color: rgba(30, 41, 59, 0.8) !important; }
 body.light-mode .border-white\/10 { border-color: rgba(0, 0, 0, 0.08) !important; }
 body.light-mode .bg-white\/5 { background-color: rgba(0, 0, 0, 0.03) !important; }
@@ -479,3 +479,59 @@ body.light-mode .dropdown-item:hover {
 }
 
 body.light-mode .bg-blob { opacity: 0.08; }
+
+/* D5: Scale blobs on mobile */
+@media (max-width: 768px) {
+  .bg-blob {
+    width: 50vw !important;
+    height: 50vw !important;
+    filter: blur(60px);
+  }
+}
+
+/* D3: Inline location mismatch warning on meal slots */
+.meal-slot-mismatch {
+  border-color: rgba(251, 191, 36, 0.4) !important;
+  box-shadow: inset 0 0 0 1px rgba(251, 191, 36, 0.15);
+}
+
+/* D2: SPLIT badge */
+.badge-split {
+  background: rgba(168, 85, 247, 0.15);
+  color: #c084fc;
+  border: 1px solid rgba(168, 85, 247, 0.3);
+}
+
+/* D8: Dining event badge */
+.badge-event {
+  background: rgba(236, 72, 153, 0.12);
+  color: #f472b6;
+  border: 1px solid rgba(236, 72, 153, 0.25);
+}
+
+/* D1: Notes indicator */
+.note-indicator {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #fbbf24;
+  display: inline-block;
+  margin-left: 4px;
+  vertical-align: middle;
+}
+
+/* D4: Search highlight */
+.search-match {
+  background: rgba(251, 191, 36, 0.25);
+  border-radius: 2px;
+  padding: 0 1px;
+}
+
+body.light-mode .search-match {
+  background: rgba(251, 191, 36, 0.35);
+}
+
+/* Light mode additions for new elements */
+body.light-mode .text-white\/30 { color: rgba(30, 41, 59, 0.4) !important; }
+body.light-mode .text-white\/40 { color: rgba(30, 41, 59, 0.55) !important; }
+body.light-mode .text-white\/50 { color: rgba(30, 41, 59, 0.65) !important; }

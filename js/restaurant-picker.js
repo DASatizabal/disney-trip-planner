@@ -180,6 +180,8 @@ const RestaurantPicker = {
       return;
     }
 
+    const searchTerm = (document.getElementById('picker-search').value || '').trim();
+
     container.innerHTML = results.map(r => {
       const badgeClass = this._creditBadgeClass(r.creditType);
       const vip = r.id ? CreditEngine.getVIPInfo(r.id, this._dayDate, this._mealSlot) : { available: false };
@@ -189,11 +191,14 @@ const RestaurantPicker = {
         ? 'style="opacity:0.4;pointer-events:none;"'
         : `onclick="RestaurantPicker.selectRestaurant(${r.id ? r.id : "null"}, '${r.name.replace(/'/g, "\\'")}')"`;
 
+      // D4: Highlight search match in name
+      const displayName = searchTerm ? this._highlightMatch(r.name, searchTerm) : r.name;
+
       return `
         <div class="restaurant-card" ${selectAttr}>
           <div class="flex items-start justify-between gap-2">
             <div class="min-w-0 flex-1">
-              <div class="text-sm font-medium">${r.name}</div>
+              <div class="text-sm font-medium">${displayName}</div>
               <div class="text-[11px] text-white/40 mt-0.5">${r.location || ''}${r.parkArea ? ' — ' + r.parkArea : ''}</div>
               <div class="flex items-center gap-1 mt-1 flex-wrap">
                 <span class="badge ${badgeClass}">${r.creditType}</span>
@@ -203,6 +208,7 @@ const RestaurantPicker = {
                 ${r.seafoodWarning ? '<span class="badge badge-seafood">SEAFOOD</span>' : ''}
                 ${r.isCharacter ? '<span class="badge badge-character">CHARS</span>' : ''}
                 ${r.isBuffet ? '<span class="text-[10px] text-white/30">Buffet/AYCE</span>' : ''}
+                ${r.isDiningEvent ? '<span class="badge badge-event">EVENT</span>' : ''}
                 ${r.familyReview === 'loved' ? '<span class="badge badge-loved">LOVED</span>' : ''}
                 ${r.familyReview === 'liked' ? '<span class="badge badge-loved">LIKED</span>' : ''}
                 ${r.familyReview === 'skip' ? '<span class="badge badge-skip">SKIP</span>' : ''}
@@ -230,6 +236,13 @@ const RestaurantPicker = {
     document.getElementById('filter-cuisine').value = 'all';
     document.getElementById('picker-search').value = '';
     this.applyFilters();
+  },
+
+  // D4: Highlight matching substring
+  _highlightMatch(text, term) {
+    if (!term) return text;
+    const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return text.replace(new RegExp(`(${escaped})`, 'gi'), '<span class="search-match">$1</span>');
   },
 
   _creditBadgeClass(creditType) {

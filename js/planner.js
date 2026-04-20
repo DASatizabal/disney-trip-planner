@@ -45,9 +45,11 @@ const Planner = {
           <div class="flex items-center gap-1 mt-0.5 flex-wrap">
             <span class="badge badge-pool-${td.pool.toLowerCase()}">${td.pool}</span>
             ${td.overlapPool ? `<span class="badge badge-pool-${td.overlapPool.toLowerCase()}">${td.overlapPool}</span>` : ''}
+            ${day.splitDay ? '<span class="badge badge-split">SPLIT</span>' : ''}
             ${td.vip ? '<span class="badge badge-vip">VIP</span>' : ''}
             ${td.isCheckin ? '<span class="badge badge-checkin">Check-in</span>' : ''}
             ${td.isCheckout ? '<span class="badge badge-checkout">Check-out</span>' : ''}
+            ${day.notes ? '<span class="note-indicator" title="Has notes"></span>' : ''}
           </div>
         </div>
         <div class="relative">
@@ -109,15 +111,30 @@ const Planner = {
         </div>
       </div>
 
-      <!-- Day notes -->
+      <!-- D1: Day notes — button to expand -->
       <div class="mt-2 pt-2 border-t border-white/5">
-        <textarea
-          placeholder="Day notes..."
-          class="w-full bg-transparent text-[11px] text-white/40 resize-none focus:text-white/70 focus:outline-none"
-          rows="1"
-          onchange="Planner.updateNotes('${td.date}', this.value)"
-          onfocus="this.rows=3" onblur="this.rows=1"
-        >${day.notes || ''}</textarea>
+        ${day.notes ? `
+          <div class="text-[11px] text-white/40 mb-1 cursor-pointer" onclick="this.nextElementSibling.style.display='block'; this.style.display='none';">
+            <i data-lucide="sticky-note" class="w-3 h-3 inline text-amber-400/50"></i> ${day.notes.length > 60 ? day.notes.substring(0, 60) + '...' : day.notes}
+          </div>
+          <textarea style="display:none"
+            class="w-full bg-white/5 border border-white/10 rounded-lg px-2 py-1 text-[11px] text-white/60 resize-none focus:text-white/80 focus:outline-none"
+            rows="3"
+            onchange="Planner.updateNotes('${td.date}', this.value)"
+            onblur="Planner.render(); lucide.createIcons();"
+          >${day.notes}</textarea>
+        ` : `
+          <button onclick="this.nextElementSibling.style.display='block'; this.style.display='none'; this.nextElementSibling.focus();"
+            class="text-[10px] text-white/20 hover:text-white/40 flex items-center gap-1">
+            <i data-lucide="plus" class="w-3 h-3"></i> Add note
+          </button>
+          <textarea style="display:none"
+            class="w-full bg-white/5 border border-white/10 rounded-lg px-2 py-1 text-[11px] text-white/60 resize-none focus:text-white/80 focus:outline-none"
+            rows="3" placeholder="Day notes..."
+            onchange="Planner.updateNotes('${td.date}', this.value)"
+            onblur="if(!this.value) { this.style.display='none'; this.previousElementSibling.style.display=''; }"
+          ></textarea>
+        `}
       </div>
     `;
 
@@ -192,8 +209,17 @@ const Planner = {
     const apBadge = (r.apDiscountPct && sel.paymentMethod !== 'ap')
       ? `<span class="text-[9px] text-amber-400/50">AP ${r.apDiscountPct}%</span>` : '';
 
+    // D3: Inline location mismatch check
+    const dayPark = day.splitDay && day.splitParks
+      ? (slot === 'dinner' || slot.startsWith('snack3') || slot.startsWith('snack4') ? day.splitParks.pm : day.splitParks.am)
+      : day.park;
+    const isParkRestaurant = ['Magic Kingdom', 'EPCOT', 'Hollywood Studios', 'Animal Kingdom', 'Disney Springs'].includes(r.location);
+    const isMismatch = isParkRestaurant && dayPark && dayPark !== 'none' && !dayPark.startsWith('Resort') && !dayPark.startsWith('Travel') && !dayPark.startsWith('Split') && r.location !== dayPark;
+    const mismatchClass = isMismatch ? 'meal-slot-mismatch' : '';
+    const mismatchIcon = isMismatch ? '<i data-lucide="map-pin-off" class="w-3 h-3 text-amber-400/60 flex-shrink-0" title="Different park"></i>' : '';
+
     return `
-      <div class="meal-slot meal-slot-filled relative group ${isSnack ? '' : ''}"
+      <div class="meal-slot meal-slot-filled relative group ${mismatchClass} ${isSnack ? '' : ''}"
            onclick="Planner.onSlotClick('${td.date}', '${slot}')">
         <div class="flex items-start justify-between gap-1">
           <div class="min-w-0 flex-1">
@@ -210,6 +236,7 @@ const Planner = {
               ${r.isCharacter ? '<span class="badge badge-character">CHARS</span>' : ''}
             </div>
           </div>
+          ${mismatchIcon}
           <button onclick="event.stopPropagation(); Planner.clearSlot('${td.date}', '${slot}')"
             class="p-0.5 opacity-0 group-hover:opacity-100 hover:bg-white/10 rounded transition-opacity flex-shrink-0">
             <i data-lucide="x" class="w-3 h-3 text-white/40"></i>
@@ -308,18 +335,37 @@ const Planner = {
       return;
     }
 
+    // D7: Load dismissed VIP tips
+    const dismissedRaw = localStorage.getItem(`${STORAGE_PREFIX}_dismissed_tips`) || '{}';
+    const dismissed = JSON.parse(dismissedRaw);
+
+    // Filter out dismissed tips
+    const visible = conflicts.filter(c => {
+      if (c.type === 'missed_vip' && c.dayDate && c.slot) {
+        const key = `${c.dayDate}_${c.slot}`;
+        return !dismissed[key];
+      }
+      return true;
+    });
+
+    if (visible.length === 0) {
+      container.style.display = 'none';
+      return;
+    }
+
     container.style.display = '';
-    list.innerHTML = conflicts.map(c => {
+    list.innerHTML = visible.map(c => {
       const icon = c.type === 'overdraft' ? 'alert-triangle' : c.type === 'missed_vip' ? 'sparkles' : 'map-pin';
-      const cls = c.severity === 'error' ? 'conflict-warning' : c.severity === 'tip'
-        ? 'conflict-warning' : 'conflict-warning';
       const style = c.severity === 'tip'
         ? 'background: rgba(245,158,11,0.08); border-color: rgba(245,158,11,0.25); color: #fbbf24;'
         : c.severity === 'warning'
           ? 'background: rgba(251,191,36,0.08); border-color: rgba(251,191,36,0.25); color: #fde68a;'
           : '';
-      return `<div class="${cls}" style="${style}">
-        <i data-lucide="${icon}" class="w-3 h-3 inline mr-1"></i>${c.message}
+      const dismissBtn = c.type === 'missed_vip' && c.dayDate && c.slot
+        ? ` <button onclick="event.stopPropagation(); Planner.dismissTip('${c.dayDate}', '${c.slot}')" class="ml-1 text-[9px] opacity-50 hover:opacity-100">dismiss</button>`
+        : '';
+      return `<div class="conflict-warning" style="${style}">
+        <i data-lucide="${icon}" class="w-3 h-3 inline mr-1"></i>${c.message}${dismissBtn}
       </div>`;
     }).join('');
   },
@@ -596,6 +642,16 @@ const Planner = {
 
   closeDayAction() {
     document.getElementById('day-action-modal').classList.remove('active');
+  },
+
+  // D7: Dismiss a VIP tip per day+slot
+  dismissTip(dayDate, slot) {
+    const raw = localStorage.getItem(`${STORAGE_PREFIX}_dismissed_tips`) || '{}';
+    const dismissed = JSON.parse(raw);
+    dismissed[`${dayDate}_${slot}`] = true;
+    localStorage.setItem(`${STORAGE_PREFIX}_dismissed_tips`, JSON.stringify(dismissed));
+    this._renderConflicts();
+    lucide.createIcons();
   },
 
   updateNotes(date, text) {

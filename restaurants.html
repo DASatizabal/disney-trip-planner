@@ -197,6 +197,7 @@
         if (r.isBuffet) flags.push('<span class="text-[9px] text-white/30">BUFFET</span>');
         if (r.isSignature) flags.push('<span class="text-[9px] text-white/30">SIG</span>');
         if (r.isDinnerShow) flags.push('<span class="text-[9px] text-white/30">SHOW</span>');
+        if (r.isDiningEvent) flags.push('<span class="badge badge-event" style="font-size:8px">EVENT</span>');
         if (r.reservation) flags.push('<span class="text-[9px] text-green-400/60">RES</span>');
         if (r.ddpValue === 'excellent') flags.push('<span class="ddp-stars text-[9px]">★★★</span>');
         else if (r.ddpValue === 'good') flags.push('<span class="ddp-stars text-[9px]">★★</span>');
