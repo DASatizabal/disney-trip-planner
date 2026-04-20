@@ -35,11 +35,14 @@ const CreditEngine = {
 
     const balance = this.getBalance(poolId, planState);
     const cat = r.creditCategory;
-    const remaining = balance[cat].remaining - r.creditsConsumed;
+    const currentRemaining = balance[cat].remaining;
+    const afterRemaining = currentRemaining - r.creditsConsumed;
     return {
-      ok: remaining >= 0,
-      remaining,
-      deficit: remaining < 0 ? Math.abs(remaining) : 0,
+      ok: afterRemaining >= 0,
+      currentRemaining,
+      afterRemaining,
+      total: balance[cat].total,
+      deficit: afterRemaining < 0 ? Math.abs(afterRemaining) : 0,
       creditType: cat,
       creditsNeeded: r.creditsConsumed
     };

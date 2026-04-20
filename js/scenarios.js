@@ -68,7 +68,7 @@ const Scenarios = {
     this._list.forEach(name => {
       const opt = document.createElement('option');
       opt.value = name;
-      opt.textContent = name.charAt(0).toUpperCase() + name.slice(1).replace(/-/g, ' ');
+      opt.textContent = name.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
       if (name === this._current) opt.selected = true;
       selectEl.appendChild(opt);
     });

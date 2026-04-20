@@ -1,7 +1,7 @@
 const History = {
   _undoStack: [],
   _redoStack: [],
-  _maxSize: 10,
+  _maxSize: 50,
 
   push(planState) {
     this._undoStack.push(JSON.parse(JSON.stringify(planState)));

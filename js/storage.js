@@ -64,21 +64,70 @@ const Storage = {
     URL.revokeObjectURL(url);
   },
 
+  // B5: Hardened import with schema validation
   importJSON(file) {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = (e) => {
         try {
           const data = JSON.parse(e.target.result);
-          if (data.plan && data.plan.days) {
-            resolve(data.plan);
-          } else if (data.days) {
-            resolve(data);
-          } else {
-            reject(new Error('Invalid plan file: missing days object'));
+          const plan = data.plan || (data.days ? data : null);
+          if (!plan) {
+            reject(new Error('Invalid file: no plan data found'));
+            return;
           }
+
+          // Validate days structure
+          if (!plan.days || typeof plan.days !== 'object') {
+            reject(new Error('Invalid plan: missing "days" object'));
+            return;
+          }
+
+          const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+          const validSlots = new Set(MEAL_SLOTS);
+          let dayCount = 0;
+
+          for (const [dateKey, day] of Object.entries(plan.days)) {
+            if (!dateRegex.test(dateKey)) {
+              reject(new Error(`Invalid plan: "${dateKey}" is not a valid date (expected YYYY-MM-DD)`));
+              return;
+            }
+            if (!day.selections || typeof day.selections !== 'object') {
+              reject(new Error(`Invalid plan: day ${dateKey} missing "selections" object`));
+              return;
+            }
+            for (const slotKey of Object.keys(day.selections)) {
+              if (!validSlots.has(slotKey)) {
+                reject(new Error(`Invalid plan: unknown meal slot "${slotKey}" in day ${dateKey}`));
+                return;
+              }
+            }
+            dayCount++;
+          }
+
+          if (dayCount === 0) {
+            reject(new Error('Invalid plan: no days found'));
+            return;
+          }
+
+          // Ensure all expected fields exist with defaults
+          for (const day of Object.values(plan.days)) {
+            if (typeof day.park === 'undefined') day.park = 'none';
+            if (typeof day.splitDay === 'undefined') day.splitDay = false;
+            if (typeof day.splitParks === 'undefined') day.splitParks = null;
+            if (typeof day.notes === 'undefined') day.notes = '';
+            for (const slot of MEAL_SLOTS) {
+              if (!(slot in day.selections)) day.selections[slot] = null;
+            }
+          }
+
+          plan.version = plan.version || 1;
+          plan.lastModified = new Date().toISOString();
+
+          resolve(plan);
         } catch (err) {
-          reject(new Error('Invalid JSON file'));
+          if (err.message.startsWith('Invalid')) reject(err);
+          else reject(new Error('Invalid JSON file: ' + err.message));
         }
       };
       reader.onerror = () => reject(new Error('Failed to read file'));

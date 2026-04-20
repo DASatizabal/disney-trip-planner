@@ -1,27 +1,18 @@
 const App = {
   init() {
-    // Version
     document.getElementById('version-tag').textContent = `v${APP_VERSION}`;
-
-    // Theme
     this._initTheme();
 
-    // Scenarios
     Scenarios.init();
     this._renderScenarioSelect();
 
-    // Load plan
     const planState = Storage.load(Scenarios.getCurrent()) || Storage.getDefaultPlan();
     Planner.loadState(planState);
     Planner.render();
 
-    // Swipe
     Swipe.init('planner-container');
-
-    // Keyboard shortcuts
     this._bindKeyboard();
 
-    // Scenario select change
     document.getElementById('scenario-select').addEventListener('change', (e) => {
       const plan = Scenarios.switchTo(e.target.value);
       Planner.loadState(plan);
@@ -29,9 +20,7 @@ const App = {
       this.updateUndoRedo();
     });
 
-    // Lucide icons
     lucide.createIcons();
-
     this.updateUndoRedo();
   },
 
@@ -87,7 +76,6 @@ const App = {
   // Keyboard
   _bindKeyboard() {
     document.addEventListener('keydown', (e) => {
-      // Don't capture when typing in inputs
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
 
       if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
@@ -104,28 +92,40 @@ const App = {
     });
   },
 
-  // Scenarios
+  // Scenarios — B4: use modals instead of prompt/confirm
   _renderScenarioSelect() {
     Scenarios.renderSelect(document.getElementById('scenario-select'));
   },
 
   newScenario() {
-    const name = prompt('New scenario name:');
-    if (!name) return;
-
-    const cloneCurrent = confirm('Clone current plan to new scenario?');
-    const plan = cloneCurrent ? Planner.getState() : null;
-
-    if (Scenarios.create(name, plan)) {
-      const newPlan = Storage.load(Scenarios.getCurrent()) || Storage.getDefaultPlan();
-      Planner.loadState(newPlan);
-      Planner.render();
-      this._renderScenarioSelect();
-      this.updateUndoRedo();
-      this.toast(`Scenario "${name}" created`, 'success');
-    } else {
-      this.toast('Invalid or duplicate name', 'error');
-    }
+    this.inputModal('New Scenario', 'Enter a name for the new scenario:', '', (name) => {
+      if (!name) return;
+      this.confirm('Clone Plan?', 'Clone the current plan to the new scenario, or start fresh?', () => {
+        // Clone
+        if (Scenarios.create(name, Planner.getState())) {
+          const newPlan = Storage.load(Scenarios.getCurrent()) || Storage.getDefaultPlan();
+          Planner.loadState(newPlan);
+          Planner.render();
+          this._renderScenarioSelect();
+          this.updateUndoRedo();
+          this.toast(`Scenario "${name}" created`, 'success');
+        } else {
+          this.toast('Invalid or duplicate name', 'error');
+        }
+      }, false, 'Clone Current', 'Start Fresh', () => {
+        // Start fresh
+        if (Scenarios.create(name, null)) {
+          const newPlan = Storage.load(Scenarios.getCurrent()) || Storage.getDefaultPlan();
+          Planner.loadState(newPlan);
+          Planner.render();
+          this._renderScenarioSelect();
+          this.updateUndoRedo();
+          this.toast(`Scenario "${name}" created`, 'success');
+        } else {
+          this.toast('Invalid or duplicate name', 'error');
+        }
+      });
+    });
   },
 
   deleteScenario() {
@@ -135,7 +135,7 @@ const App = {
       return;
     }
 
-    this.confirm('Delete Scenario', `Delete "${current}" and all its selections?`, () => {
+    this.confirm('Delete Scenario', `Delete "${current}" and all its selections? This cannot be undone.`, () => {
       Scenarios.deleteCurrent();
       const plan = Storage.load(Scenarios.getCurrent()) || Storage.getDefaultPlan();
       Planner.loadState(plan);
@@ -143,10 +143,10 @@ const App = {
       this._renderScenarioSelect();
       this.updateUndoRedo();
       this.toast('Scenario deleted', 'success');
-    });
+    }, true);
   },
 
-  // Export/Import
+  // Export/Import — B5: confirm before overwriting
   exportPlan() {
     Storage.exportJSON(Planner.getState(), Scenarios.getCurrent());
     this.toast('Plan exported', 'success');
@@ -162,12 +162,15 @@ const App = {
 
     try {
       const planState = await Storage.importJSON(file);
-      History.push(Planner.getState());
-      Planner.loadState(planState);
-      Scenarios.save(planState);
-      Planner.render();
-      this.updateUndoRedo();
-      this.toast('Plan imported', 'success');
+      // B5: confirm before overwriting
+      this.confirm('Import Plan', 'Importing will replace your current plan. Continue?', () => {
+        History.push(Planner.getState());
+        Planner.loadState(planState);
+        Scenarios.save(planState);
+        Planner.render();
+        this.updateUndoRedo();
+        this.toast('Plan imported', 'success');
+      }, true, 'Import', 'Cancel');
     } catch (err) {
       this.toast(err.message, 'error');
     }
@@ -185,17 +188,26 @@ const App = {
       Planner.render();
       this.updateUndoRedo();
       this.toast('Plan reset', 'success');
-    });
+    }, true);
   },
 
-  // Confirm dialog
-  confirm(title, message, onOk) {
+  // B3: Confirm dialog with destructive flag + custom button labels + optional cancel callback
+  confirm(title, message, onOk, destructive = false, okLabel = 'Confirm', cancelLabel = 'Cancel', onCancel = null) {
     const modal = document.getElementById('confirm-modal');
     document.getElementById('confirm-title').textContent = title;
     document.getElementById('confirm-message').textContent = message;
 
     const okBtn = document.getElementById('confirm-ok');
     const cancelBtn = document.getElementById('confirm-cancel');
+
+    okBtn.textContent = okLabel;
+    cancelBtn.textContent = cancelLabel;
+
+    if (destructive) {
+      okBtn.className = 'flex-1 px-3 py-2 text-xs rounded-lg bg-red-500/80 hover:bg-red-500 text-white font-medium transition-colors';
+    } else {
+      okBtn.className = 'flex-1 px-3 py-2 text-xs rounded-lg bg-blue-500/80 hover:bg-blue-500 text-white font-medium transition-colors';
+    }
 
     const cleanup = () => {
       modal.classList.remove('active');
@@ -204,9 +216,35 @@ const App = {
     };
 
     okBtn.onclick = () => { cleanup(); onOk(); };
-    cancelBtn.onclick = () => { cleanup(); };
+    cancelBtn.onclick = () => { cleanup(); if (onCancel) onCancel(); };
 
     modal.classList.add('active');
+  },
+
+  // B4: Input modal (replaces prompt)
+  inputModal(title, message, defaultValue, onSubmit) {
+    const modal = document.getElementById('input-modal');
+    document.getElementById('input-modal-title').textContent = title;
+    document.getElementById('input-modal-message').textContent = message;
+    const input = document.getElementById('input-modal-field');
+    input.value = defaultValue || '';
+
+    const okBtn = document.getElementById('input-modal-ok');
+    const cancelBtn = document.getElementById('input-modal-cancel');
+
+    const cleanup = () => {
+      modal.classList.remove('active');
+      okBtn.onclick = null;
+      cancelBtn.onclick = null;
+      input.onkeydown = null;
+    };
+
+    okBtn.onclick = () => { cleanup(); onSubmit(input.value.trim()); };
+    cancelBtn.onclick = () => { cleanup(); };
+    input.onkeydown = (e) => { if (e.key === 'Enter') { cleanup(); onSubmit(input.value.trim()); } };
+
+    modal.classList.add('active');
+    setTimeout(() => input.focus(), 100);
   },
 
   // Toast

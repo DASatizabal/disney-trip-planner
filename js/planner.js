@@ -92,9 +92,20 @@ const Planner = {
             <i data-lucide="cookie" class="w-3 h-3"></i> Snacks
             <span class="text-white/20">(${this._snackCount(day)}/4)</span>
           </div>
-          <div class="grid grid-cols-2 gap-1">
-            ${['snack1', 'snack2', 'snack3', 'snack4'].map(s => this._renderSlot(td, day, s)).join('')}
-          </div>
+          ${day.splitDay ? `
+            <div class="text-[9px] text-white/20 mb-1">AM</div>
+            <div class="grid grid-cols-2 gap-1 mb-1">
+              ${['snack1', 'snack2'].map(s => this._renderSnackSlot(td, day, s)).join('')}
+            </div>
+            <div class="text-[9px] text-white/20 mb-1">PM</div>
+            <div class="grid grid-cols-2 gap-1">
+              ${['snack3', 'snack4'].map(s => this._renderSnackSlot(td, day, s)).join('')}
+            </div>
+          ` : `
+            <div class="grid grid-cols-2 gap-1">
+              ${['snack1', 'snack2', 'snack3', 'snack4'].map(s => this._renderSlot(td, day, s)).join('')}
+            </div>
+          `}
         </div>
       </div>
 
@@ -186,6 +197,19 @@ const Planner = {
         </div>
       </div>
     `;
+  },
+
+  // B2: Snack slot with AM/PM toggle in split days
+  _renderSnackSlot(td, day, slot) {
+    const period = day.selections[slot]?._splitPeriod || (slot <= 'snack2' ? 'am' : 'pm');
+    return this._renderSlot(td, day, slot);
+  },
+
+  toggleSnackPeriod(date, slot) {
+    const sel = this._planState.days[date].selections[slot];
+    if (!sel) return;
+    sel._splitPeriod = (sel._splitPeriod || (slot <= 'snack2' ? 'am' : 'pm')) === 'am' ? 'pm' : 'am';
+    this._onChanged();
   },
 
   _creditBadgeClass(creditType) {
@@ -291,6 +315,28 @@ const Planner = {
   },
 
   _applySelection(date, slot, restaurantId, paymentMethod, pool) {
+    // B6: Check for overdraft before committing DDP selections
+    if (paymentMethod === 'ddp' && pool && typeof restaurantId === 'number') {
+      const check = CreditEngine.wouldOverdraft(pool, restaurantId, this._planState);
+      if (!check.ok) {
+        const r = CreditEngine._getRestaurant(restaurantId);
+        const typeName = (check.creditType || 'ts').toUpperCase();
+        App.confirm(
+          'Credit Overdraft',
+          `Bucket ${pool} ${typeName}: ${check.currentRemaining}/${check.total} remaining → would be ${check.afterRemaining}/${check.total}. Use this credit anyway (shows as over budget) or pay OOP instead?`,
+          () => { this._commitSelection(date, slot, restaurantId, paymentMethod, pool); },
+          true,
+          'Use Anyway',
+          'Pay OOP',
+          () => { this._commitSelection(date, slot, restaurantId, 'oop', null); }
+        );
+        return;
+      }
+    }
+    this._commitSelection(date, slot, restaurantId, paymentMethod, pool);
+  },
+
+  _commitSelection(date, slot, restaurantId, paymentMethod, pool) {
     History.push(JSON.parse(JSON.stringify(this._planState)));
 
     this._planState.days[date].selections[slot] = {
@@ -395,22 +441,58 @@ const Planner = {
   startClone(fromDate) {
     this._closeAllMenus();
     this._showDayAction('Clone To...', `Copy ${TRIP_DAYS.find(d => d.date === fromDate)?.dow}'s plan to another day`, fromDate, (toDate) => {
-      History.push(JSON.parse(JSON.stringify(this._planState)));
-
+      // B7: Check for overdrafts before committing clone
       const fromDay = this._planState.days[fromDate];
-      const toDay = this._planState.days[toDate];
+      const targetTd = TRIP_DAYS.find(d => d.date === toDate);
+      const targetPool = targetTd?.pool;
 
-      toDay.selections = JSON.parse(JSON.stringify(fromDay.selections));
-      toDay.notes = fromDay.notes;
-      toDay.park = fromDay.park;
-      toDay.splitDay = fromDay.splitDay;
-      toDay.splitParks = fromDay.splitParks ? JSON.parse(JSON.stringify(fromDay.splitParks)) : null;
+      // Simulate: what would the balance be after cloning?
+      const ddpSelections = Object.values(fromDay.selections).filter(s => s && s.paymentMethod === 'ddp');
+      if (targetPool && ddpSelections.length > 0) {
+        // Temporarily simulate the clone to check overdraft
+        const simState = JSON.parse(JSON.stringify(this._planState));
+        simState.days[toDate].selections = JSON.parse(JSON.stringify(fromDay.selections));
+        Object.values(simState.days[toDate].selections).forEach(sel => {
+          if (sel && sel.paymentMethod === 'ddp') sel.pool = targetPool;
+        });
 
-      this._reassignPools(toDate);
+        const balance = CreditEngine.getBalance(targetPool, simState);
+        const overdrafts = ['ts', 'qs', 'sn'].filter(t => balance[t].remaining < 0);
 
-      this._onChanged();
-      App.toast('Day cloned', 'success');
+        if (overdrafts.length > 0) {
+          const details = overdrafts.map(t =>
+            `${t.toUpperCase()}: ${balance[t].remaining}/${balance[t].total}`
+          ).join(', ');
+          App.confirm(
+            'Clone Would Overdraft',
+            `Cloning to ${targetTd.dow} (Bucket ${targetPool}) would exceed credits: ${details}. Clone anyway?`,
+            () => { this._executeClone(fromDate, toDate); },
+            true, 'Clone Anyway', 'Cancel'
+          );
+          return;
+        }
+      }
+
+      this._executeClone(fromDate, toDate);
     });
+  },
+
+  _executeClone(fromDate, toDate) {
+    History.push(JSON.parse(JSON.stringify(this._planState)));
+
+    const fromDay = this._planState.days[fromDate];
+    const toDay = this._planState.days[toDate];
+
+    toDay.selections = JSON.parse(JSON.stringify(fromDay.selections));
+    toDay.notes = fromDay.notes;
+    toDay.park = fromDay.park;
+    toDay.splitDay = fromDay.splitDay;
+    toDay.splitParks = fromDay.splitParks ? JSON.parse(JSON.stringify(fromDay.splitParks)) : null;
+
+    this._reassignPools(toDate);
+
+    this._onChanged();
+    App.toast('Day cloned', 'success');
   },
 
   _reassignPools(date) {

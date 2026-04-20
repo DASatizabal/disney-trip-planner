@@ -286,15 +286,31 @@
     </div>
   </div>
 
-  <!-- Confirm Modal (generic) -->
+  <!-- Confirm Modal (generic) — B3: supports destructive flag via JS -->
   <div class="modal-backdrop" id="confirm-modal">
-    <div class="modal-content" style="max-width:380px;">
+    <div class="modal-content" style="max-width:420px;">
       <div class="p-4">
         <h3 class="text-sm font-bold mb-2" id="confirm-title"></h3>
         <p class="text-xs text-white/60 mb-4" id="confirm-message"></p>
         <div class="flex gap-2">
           <button id="confirm-cancel" class="flex-1 px-3 py-2 text-xs rounded-lg bg-white/5 hover:bg-white/10 transition-colors">Cancel</button>
           <button id="confirm-ok" class="flex-1 px-3 py-2 text-xs rounded-lg bg-red-500/80 hover:bg-red-500 text-white font-medium transition-colors">Confirm</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Input Modal (B4: replaces prompt()) -->
+  <div class="modal-backdrop" id="input-modal">
+    <div class="modal-content" style="max-width:380px;">
+      <div class="p-4">
+        <h3 class="text-sm font-bold mb-1" id="input-modal-title"></h3>
+        <p class="text-xs text-white/50 mb-3" id="input-modal-message"></p>
+        <input type="text" id="input-modal-field"
+          class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-white/30 mb-3">
+        <div class="flex gap-2">
+          <button id="input-modal-cancel" class="flex-1 px-3 py-2 text-xs rounded-lg bg-white/5 hover:bg-white/10 transition-colors">Cancel</button>
+          <button id="input-modal-ok" class="flex-1 px-3 py-2 text-xs rounded-lg bg-blue-500/80 hover:bg-blue-500 text-white font-medium transition-colors">Create</button>
         </div>
       </div>
     </div>
