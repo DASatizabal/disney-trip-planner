@@ -29,9 +29,14 @@ const RestaurantPicker = {
     }
 
     document.getElementById('picker-search').value = '';
-    this.applyFilters();
+    // E4: Show skeleton while loading
+    document.getElementById('picker-results').innerHTML = this._skeleton();
+    document.getElementById('picker-count').textContent = 'Loading...';
     document.getElementById('picker-modal').classList.add('active');
-    setTimeout(() => document.getElementById('picker-search').focus(), 100);
+    setTimeout(() => {
+      this.applyFilters();
+      document.getElementById('picker-search').focus();
+    }, 50);
 
     const searchInput = document.getElementById('picker-search');
     searchInput.oninput = () => {
@@ -236,6 +241,16 @@ const RestaurantPicker = {
     document.getElementById('filter-cuisine').value = 'all';
     document.getElementById('picker-search').value = '';
     this.applyFilters();
+  },
+
+  // E4: Loading skeleton
+  _skeleton() {
+    const row = `<div class="restaurant-card animate-pulse">
+      <div class="h-3 bg-white/10 rounded w-3/4 mb-2"></div>
+      <div class="h-2 bg-white/5 rounded w-1/2 mb-2"></div>
+      <div class="flex gap-1"><div class="h-3 bg-white/8 rounded w-8"></div><div class="h-3 bg-white/5 rounded w-16"></div></div>
+    </div>`;
+    return row.repeat(6);
   },
 
   // D4: Highlight matching substring

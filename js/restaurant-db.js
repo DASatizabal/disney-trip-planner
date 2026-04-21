@@ -5137,7 +5137,7 @@ const RESTAURANTS = [
     category: 'quick_service',
     location: 'Animal Kingdom',
     parkArea: 'Discovery Island',
-    cuisine: 'Italian/American',
+    cuisine: 'Pizza',
     meals: ['lunch', 'dinner'],
     avgAdultPrice: 13,
     avgKidPrice: 9,
