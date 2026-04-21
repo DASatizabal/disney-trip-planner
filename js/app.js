@@ -380,19 +380,23 @@ const App = {
     document.getElementById('summary-modal').classList.remove('active');
   },
 
-  // Toast
-  toast(message, type = 'info') {
+  // Toast — supports optional click callback
+  toast(message, type = 'info', onClick = null) {
     const container = document.getElementById('toast-container');
     const toast = document.createElement('div');
     toast.className = `toast toast-${type}`;
     toast.textContent = message;
+    if (onClick) {
+      toast.style.cursor = 'pointer';
+      toast.addEventListener('click', () => { toast.remove(); onClick(); });
+    }
     container.appendChild(toast);
 
     setTimeout(() => {
       toast.style.opacity = '0';
       toast.style.transition = 'opacity 0.3s';
       setTimeout(() => toast.remove(), 300);
-    }, 2500);
+    }, onClick ? 5000 : 2500);
   }
 };
 

@@ -364,7 +364,11 @@ const Planner = {
       const dismissBtn = c.type === 'missed_vip' && c.dayDate && c.slot
         ? ` <button onclick="event.stopPropagation(); Planner.dismissTip('${c.dayDate}', '${c.slot}')" class="ml-1 text-[9px] opacity-50 hover:opacity-100">dismiss</button>`
         : '';
-      return `<div class="conflict-warning" style="${style}">
+      // D9: Location mismatch conflicts are clickable to open resolver
+      const clickAttr = c.type === 'location_mismatch' && c.dayDate && c.slot
+        ? ` style="${style}cursor:pointer;" onclick="Planner.openResolver('${c.dayDate}', ['${c.slot}'])"`
+        : ` style="${style}"`;
+      return `<div class="conflict-warning"${clickAttr}>
         <i data-lucide="${icon}" class="w-3 h-3 inline mr-1"></i>${c.message}${dismissBtn}
       </div>`;
     }).join('');
@@ -448,7 +452,7 @@ const Planner = {
     });
   },
 
-  // Park changes — C1: detect stranded selections and offer review
+  // Park changes — D9: detect stranded selections and open resolver
   changePark(date, park) {
     History.push(JSON.parse(JSON.stringify(this._planState)));
     const day = this._planState.days[date];
@@ -462,25 +466,149 @@ const Planner = {
     }
     this._onChanged();
 
-    // C1: Check for stranded selections after park change
+    // Check for stranded selections after park change
     if (park !== oldPark && park !== 'none' && !park.startsWith('Resort') && !park.startsWith('Travel') && !park.startsWith('Split')) {
-      const stranded = [];
-      MEAL_SLOTS.forEach(slot => {
-        const sel = day.selections[slot];
-        if (!sel) return;
-        const r = CreditEngine._getRestaurant(sel.restaurantId);
-        if (!r) return;
-        const isParkRestaurant = ['Magic Kingdom', 'EPCOT', 'Hollywood Studios', 'Animal Kingdom', 'Disney Springs'].includes(r.location);
-        if (isParkRestaurant && r.location !== park) {
-          stranded.push({ slot, name: r.name, location: r.location, creditType: r.creditType });
-        }
-      });
-
+      const stranded = this._findStranded(date);
       if (stranded.length > 0) {
-        const names = stranded.map(s => s.name).join(', ');
-        App.toast(`${stranded.length} selection${stranded.length > 1 ? 's' : ''} at different park: ${names}`, 'warning');
+        App.toast(`Stranded selections detected. Click to resolve.`, 'warning', () => {
+          this.openResolver(date);
+        });
       }
     }
+  },
+
+  // D9: Find stranded selections for a date
+  _findStranded(date, slotsToCheck) {
+    const day = this._planState.days[date];
+    const park = day.park;
+    const slots = slotsToCheck || MEAL_SLOTS;
+    const stranded = [];
+    const parkLocations = ['Magic Kingdom', 'EPCOT', 'Hollywood Studios', 'Animal Kingdom', 'Disney Springs'];
+
+    slots.forEach(slot => {
+      const sel = day.selections[slot];
+      if (!sel) return;
+      let r = CreditEngine._getRestaurant(sel.restaurantId);
+      if (!r && typeof sel.restaurantId === 'string') {
+        r = RestaurantMerge.findByName(sel.restaurantId.replace(/^_csv_/, '').replace(/_/g, ' '));
+      }
+      if (!r) return;
+      const isParkRestaurant = parkLocations.includes(r.location);
+      if (isParkRestaurant && r.location !== park) {
+        stranded.push({ slot, restaurantId: sel.restaurantId, name: r.name, location: r.location, creditType: r.creditType });
+      }
+    });
+    return stranded;
+  },
+
+  // D9: Resolver modal
+  openResolver(dateStr, slotsToResolve) {
+    const day = this._planState.days[dateStr];
+    const td = TRIP_DAYS.find(d => d.date === dateStr);
+    const stranded = this._findStranded(dateStr, slotsToResolve);
+
+    if (stranded.length === 0) {
+      App.toast('No stranded selections to resolve', 'info');
+      return;
+    }
+
+    const modal = document.getElementById('resolver-modal');
+    document.getElementById('resolver-title').textContent = `Fix stranded selections at ${day.park}`;
+    document.getElementById('resolver-subtitle').textContent = `${stranded.length} selection${stranded.length > 1 ? 's' : ''} at restaurants in other parks`;
+
+    this._resolverDate = dateStr;
+    this._resolverStranded = stranded;
+    this._renderResolverRows();
+    modal.classList.add('active');
+  },
+
+  _renderResolverRows() {
+    const body = document.getElementById('resolver-body');
+    const dateStr = this._resolverDate;
+    const td = TRIP_DAYS.find(d => d.date === dateStr);
+    const day = this._planState.days[dateStr];
+
+    // Refresh stranded list (some may have been resolved)
+    const current = this._findStranded(dateStr, this._resolverStranded.map(s => s.slot));
+
+    if (current.length === 0) {
+      body.innerHTML = '<div class="text-center text-green-400 text-sm py-4"><i data-lucide="check-circle" class="w-5 h-5 inline mr-1"></i>All resolved!</div>';
+      lucide.createIcons();
+      return;
+    }
+
+    body.innerHTML = current.map(s => {
+      const badgeClass = this._creditBadgeClass(s.creditType);
+      return `<div class="flex items-center gap-2 py-2 border-b border-white/5">
+        <div class="flex-1 min-w-0">
+          <div class="text-[10px] text-white/40">${td.dow} ${MEAL_LABELS[s.slot]}</div>
+          <div class="text-xs font-medium truncate">${s.name}</div>
+          <div class="flex items-center gap-1 mt-0.5">
+            <span class="badge ${badgeClass}">${s.creditType}</span>
+            <span class="text-[10px] text-white/30">${s.location}</span>
+          </div>
+        </div>
+        <div class="flex gap-1 flex-shrink-0">
+          <button onclick="Planner._resolverSwap('${s.slot}')"
+            class="px-2 py-1 text-[10px] rounded bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 transition-colors">Swap</button>
+          <button onclick="Planner._resolverRemove('${s.slot}')"
+            class="px-2 py-1 text-[10px] rounded bg-red-500/20 hover:bg-red-500/30 text-red-300 transition-colors">Remove</button>
+        </div>
+      </div>`;
+    }).join('');
+
+    lucide.createIcons();
+  },
+
+  _resolverSwap(slot) {
+    const dateStr = this._resolverDate;
+    const day = this._planState.days[dateStr];
+    const sel = day.selections[slot];
+    const r = CreditEngine._getRestaurant(sel?.restaurantId);
+
+    // Close resolver temporarily, open picker filtered to new park + same credit type
+    document.getElementById('resolver-modal').classList.remove('active');
+
+    RestaurantPicker.open(dateStr, slot, (restaurantId, paymentMethod, pool) => {
+      // Apply selection without pushing history (resolver is one undo-unit)
+      this._planState.days[dateStr].selections[slot] = {
+        restaurantId,
+        paymentMethod,
+        pool: paymentMethod === 'ddp' ? pool : null,
+        notes: sel?.notes || '',
+        adrNumber: sel?.adrNumber || ''
+      };
+      Scenarios.save(this._planState);
+      this.render();
+
+      // Re-open resolver
+      setTimeout(() => this.openResolver(dateStr, this._resolverStranded.map(s => s.slot)), 100);
+    });
+  },
+
+  _resolverRemove(slot) {
+    this._planState.days[this._resolverDate].selections[slot] = null;
+    Scenarios.save(this._planState);
+    this.render();
+    this._renderResolverRows();
+  },
+
+  _resolverRemoveAll() {
+    const dateStr = this._resolverDate;
+    const stranded = this._findStranded(dateStr, this._resolverStranded.map(s => s.slot));
+    stranded.forEach(s => {
+      this._planState.days[dateStr].selections[s.slot] = null;
+    });
+    Scenarios.save(this._planState);
+    this.render();
+    this.closeResolver();
+    App.toast('Stranded selections removed', 'info');
+  },
+
+  closeResolver() {
+    document.getElementById('resolver-modal').classList.remove('active');
+    this._resolverDate = null;
+    this._resolverStranded = null;
   },
 
   changeSplitPark(date, period, park) {
