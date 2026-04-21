@@ -64,9 +64,8 @@ const RestaurantPicker = {
         ? day.splitParks.pm : day.splitParks.am)
       : day.park;
 
-    const parks = ['Magic Kingdom', 'Magic Kingdom Park', 'EPCOT', 'Hollywood Studios', "Disney's Hollywood Studios",
-      'Animal Kingdom', "Disney's Animal Kingdom Theme Park", 'Disney Springs'];
-    const waterParks = locations.filter(l => l.includes('Water Park') || l.includes('Blizzard') || l.includes('Typhoon'));
+    const parks = ['Magic Kingdom', 'EPCOT', 'Hollywood Studios', 'Animal Kingdom', 'Disney Springs'];
+    const waterParks = locations.filter(l => l.includes('Blizzard') || l.includes('Typhoon'));
     const resorts = locations.filter(l => !parks.includes(l) && !waterParks.includes(l));
 
     const addGroup = (label, locs) => {
