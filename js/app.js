@@ -385,6 +385,9 @@ const App = {
 
   // E5: What's New
   _releaseNotes: [
+    { version: '1.6.0', date: '2026-04-22', notes: [
+      'New Pre-Trip Checklist page — link in the header toolbar (Checklist). Separate localStorage, so Lisa and you each track your own progress from your phones'
+    ]},
     { version: '1.5.4', date: '2026-04-22', notes: [
       'Credit math now counts per-diner: a family meal burns one credit per person, not one per selection',
       'OOP cost math uses actual diner composition (adults vs kids) instead of hardcoded 3+1',
