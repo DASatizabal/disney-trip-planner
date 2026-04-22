@@ -178,15 +178,15 @@ const Planner = {
     const sel = day.selections[slot];
     const isSnack = slot.startsWith('snack');
 
-    if (!sel) {
-      return `
-        <div class="meal-slot meal-slot-empty flex items-center justify-center gap-1 text-white/20 hover:text-white/40 ${isSnack ? 'py-2' : 'py-3'}"
-             onclick="Planner.onSlotClick('${td.date}', '${slot}')">
-          <i data-lucide="plus" class="w-3 h-3"></i>
-          <span class="text-[10px]">${isSnack ? '' : MEAL_LABELS[slot]}</span>
-        </div>
-      `;
-    }
+    const emptyPlaceholder = () => `
+      <div class="meal-slot meal-slot-empty flex items-center justify-center gap-1 text-white/20 hover:text-white/40 ${isSnack ? 'py-2' : 'py-3'}"
+           onclick="Planner.onSlotClick('${td.date}', '${slot}')">
+        <i data-lucide="plus" class="w-3 h-3"></i>
+        <span class="text-[10px]">${isSnack ? '' : MEAL_LABELS[slot]}</span>
+      </div>
+    `;
+
+    if (!sel) return emptyPlaceholder();
 
     let r = CreditEngine._getRestaurant(sel.restaurantId);
     // Fallback for CSV-only entries (string IDs)
@@ -194,7 +194,11 @@ const Planner = {
       const name = sel.restaurantId.replace(/^_csv_/, '').replace(/_/g, ' ');
       r = RestaurantMerge.findByName(name);
     }
-    if (!r) return '';
+    // Self-heal: clear the stale selection so state doesn't stay broken
+    if (!r) {
+      day.selections[slot] = null;
+      return emptyPlaceholder();
+    }
 
     const badgeClass = this._creditBadgeClass(r.creditType);
     const payBadge = sel.paymentMethod === 'ddp'

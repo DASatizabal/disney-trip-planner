@@ -385,6 +385,10 @@ const App = {
 
   // E5: What's New
   _releaseNotes: [
+    { version: '1.5.3', date: '2026-04-22', notes: [
+      'Picker defaults to paired resort on water park days (water parks do not serve most meals)',
+      'Self-heal orphaned meal selections so slots no longer vanish when a restaurant id goes stale'
+    ]},
     { version: '1.5.2', date: '2026-04-22', notes: [
       'Park assignments optimized based on crowd calendar'
     ]},

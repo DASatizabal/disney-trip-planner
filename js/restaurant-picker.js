@@ -86,8 +86,14 @@ const RestaurantPicker = {
     addGroup('Resorts', resorts);
 
     if (dayPark && dayPark !== 'none' && !dayPark.startsWith('Resort') && !dayPark.startsWith('Travel') && !dayPark.startsWith('Split')) {
-      // Try exact match or partial match for the day's park
-      const match = locations.find(l => l === dayPark || l.includes(dayPark) || dayPark.includes(l));
+      // Water parks don't serve most meals — default to the paired resort instead
+      let target = dayPark;
+      if (dayPark.startsWith('Water Park')) {
+        const td = TRIP_DAYS.find(d => d.date === this._dayDate);
+        if (td && POOLS[td.pool]) target = POOLS[td.pool].resort;
+      }
+      // Try exact match or partial match for the target location
+      const match = locations.find(l => l === target || l.includes(target) || target.includes(l));
       sel.value = match || 'all';
     } else {
       sel.value = 'all';
