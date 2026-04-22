@@ -498,16 +498,20 @@ const Planner = {
         </label>
       `;
     }).join('');
-    // Credit + cost summary
+    // Credit + cost summary (snacks are per-item, meals are per-diner)
     const sel = this._planState.days[state.date].selections[state.slot];
     const r = CreditEngine._getRestaurant(sel.restaurantId);
     const summary = [];
     if (r && r.creditCategory !== 'oop') {
-      const credits = r.creditsConsumed * state.diners.length;
+      const credits = r.creditCategory === 'sn'
+        ? r.creditsConsumed
+        : r.creditsConsumed * state.diners.length;
       summary.push(`${credits} ${r.creditType} credit${credits !== 1 ? 's' : ''}`);
     }
     if (r) {
-      const gross = CreditEngine.costForDiners(r, state.diners);
+      const gross = r.creditCategory === 'sn'
+        ? (r.avgAdultPrice || 0)
+        : CreditEngine.costForDiners(r, state.diners);
       if (gross > 0) summary.push(`~$${Math.round(gross)} gross`);
     }
     document.getElementById('diners-summary').textContent = summary.join(' · ');

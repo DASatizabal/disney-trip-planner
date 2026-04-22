@@ -385,6 +385,9 @@ const App = {
 
   // E5: What's New
   _releaseNotes: [
+    { version: '1.6.1', date: '2026-04-22', notes: [
+      'Snacks no longer multiply by diner count — one snack = one SN credit (and one item of cost), not four'
+    ]},
     { version: '1.6.0', date: '2026-04-22', notes: [
       'New Pre-Trip Checklist page — link in the header toolbar (Checklist). Separate localStorage, so Lisa and you each track your own progress from your phones'
     ]},

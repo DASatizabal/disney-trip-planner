@@ -26,6 +26,8 @@ const CreditEngine = {
 
   countCreditsForSelection(sel, restaurant) {
     if (!restaurant || restaurant.creditCategory === 'oop') return 0;
+    // Snacks are per-item, not per-diner (one churro = one SN credit, not four)
+    if (restaurant.creditCategory === 'sn') return restaurant.creditsConsumed;
     return restaurant.creditsConsumed * this.selectionDiners(sel).length;
   },
 
@@ -35,6 +37,13 @@ const CreditEngine = {
     const adult = restaurant.avgAdultPrice || 0;
     const kid = restaurant.avgKidPrice || 0;
     return dinerIds.reduce((sum, id) => sum + (this.isAdult(id) ? adult : kid), 0);
+  },
+
+  // Gross cost of a selection — snacks are per-item, meals are per-diner
+  grossCostForSelection(sel, restaurant) {
+    if (!restaurant) return 0;
+    if (restaurant.creditCategory === 'sn') return restaurant.avgAdultPrice || 0;
+    return this.costForDiners(restaurant, this.selectionDiners(sel));
   },
 
   getBalance(poolId, planState) {
@@ -62,7 +71,8 @@ const CreditEngine = {
     if (!r || r.creditCategory === 'oop') return { ok: true, remaining: 0, deficit: 0 };
 
     const diners = dinerIds && dinerIds.length ? dinerIds : this.defaultDiners();
-    const needed = r.creditsConsumed * diners.length;
+    // Snacks are per-item, not per-diner
+    const needed = r.creditCategory === 'sn' ? r.creditsConsumed : r.creditsConsumed * diners.length;
     const balance = this.getBalance(poolId, planState);
     const cat = r.creditCategory;
     const currentRemaining = balance[cat].remaining;
@@ -94,7 +104,9 @@ const CreditEngine = {
     const mealName = this.slotToMeal(mealSlot);
     if (r.vipDiscountPct > 0 && r.vipDiscountMeals && r.vipDiscountMeals.includes(mealName)) {
       const diners = dinerIds && dinerIds.length ? dinerIds : this.defaultDiners();
-      const price = this.costForDiners(r, diners) || (40 * 3 + 15);
+      const price = r.creditCategory === 'sn'
+        ? (r.avgAdultPrice || 15)
+        : (this.costForDiners(r, diners) || (40 * 3 + 15));
       const savings = Math.round(price * (r.vipDiscountPct / 100));
       return { available: true, pct: r.vipDiscountPct, estimatedSavings: savings };
     }
@@ -188,7 +200,7 @@ const CreditEngine = {
         if (!sel || sel.paymentMethod === 'ddp') return;
         const r = this._getRestaurant(sel.restaurantId);
         if (!r) return;
-        const fullPrice = this.costForDiners(r, this.selectionDiners(sel));
+        const fullPrice = this.grossCostForSelection(sel, r);
         let price = fullPrice;
         if (sel.paymentMethod === 'vip') {
           const discount = fullPrice * (r.vipDiscountPct || 0) / 100;
@@ -217,7 +229,9 @@ const CreditEngine = {
     if (!r || !r.apDiscountPct) return { available: false, pct: 0, estimatedSavings: 0 };
 
     const diners = dinerIds && dinerIds.length ? dinerIds : this.defaultDiners();
-    const price = this.costForDiners(r, diners) || (40 * 3 + 15);
+    const price = r.creditCategory === 'sn'
+      ? (r.avgAdultPrice || 15)
+      : (this.costForDiners(r, diners) || (40 * 3 + 15));
     const savings = Math.round(price * (r.apDiscountPct / 100));
     return {
       available: true,
