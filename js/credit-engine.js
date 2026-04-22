@@ -9,6 +9,34 @@ const CreditEngine = {
     return this._restaurantCache[id];
   },
 
+  // F1: Diner helpers — credits and OOP cost are per-head, not per-selection
+  defaultDiners() {
+    return FAMILY.map(f => f.id);
+  },
+
+  isAdult(memberOrId) {
+    const m = typeof memberOrId === 'string' ? FAMILY.find(f => f.id === memberOrId) : memberOrId;
+    if (!m) return true;
+    return m.age === 'adult' || (typeof m.age === 'number' && m.age >= 10);
+  },
+
+  selectionDiners(sel) {
+    return (sel && Array.isArray(sel.diners) && sel.diners.length) ? sel.diners : this.defaultDiners();
+  },
+
+  countCreditsForSelection(sel, restaurant) {
+    if (!restaurant || restaurant.creditCategory === 'oop') return 0;
+    return restaurant.creditsConsumed * this.selectionDiners(sel).length;
+  },
+
+  // Returns full gross price (before VIP/AP discount) given a restaurant + diners list
+  costForDiners(restaurant, dinerIds) {
+    if (!restaurant) return 0;
+    const adult = restaurant.avgAdultPrice || 0;
+    const kid = restaurant.avgKidPrice || 0;
+    return dinerIds.reduce((sum, id) => sum + (this.isAdult(id) ? adult : kid), 0);
+  },
+
   getBalance(poolId, planState) {
     const pool = POOLS[poolId];
     const used = { ts: 0, qs: 0, sn: 0 };
@@ -18,7 +46,7 @@ const CreditEngine = {
         if (!sel || sel.paymentMethod !== 'ddp' || sel.pool !== poolId) return;
         const r = this._getRestaurant(sel.restaurantId);
         if (!r || r.creditCategory === 'oop') return;
-        used[r.creditCategory] += r.creditsConsumed;
+        used[r.creditCategory] += this.countCreditsForSelection(sel, r);
       });
     });
 
@@ -29,14 +57,16 @@ const CreditEngine = {
     };
   },
 
-  wouldOverdraft(poolId, restaurantId, planState) {
+  wouldOverdraft(poolId, restaurantId, planState, dinerIds) {
     const r = this._getRestaurant(restaurantId);
     if (!r || r.creditCategory === 'oop') return { ok: true, remaining: 0, deficit: 0 };
 
+    const diners = dinerIds && dinerIds.length ? dinerIds : this.defaultDiners();
+    const needed = r.creditsConsumed * diners.length;
     const balance = this.getBalance(poolId, planState);
     const cat = r.creditCategory;
     const currentRemaining = balance[cat].remaining;
-    const afterRemaining = currentRemaining - r.creditsConsumed;
+    const afterRemaining = currentRemaining - needed;
     return {
       ok: afterRemaining >= 0,
       currentRemaining,
@@ -44,7 +74,7 @@ const CreditEngine = {
       total: balance[cat].total,
       deficit: afterRemaining < 0 ? Math.abs(afterRemaining) : 0,
       creditType: cat,
-      creditsNeeded: r.creditsConsumed
+      creditsNeeded: needed
     };
   },
 
@@ -56,14 +86,15 @@ const CreditEngine = {
     return pools;
   },
 
-  getVIPInfo(restaurantId, dateStr, mealSlot) {
+  getVIPInfo(restaurantId, dateStr, mealSlot, dinerIds) {
     const r = this._getRestaurant(restaurantId);
     const day = TRIP_DAYS.find(d => d.date === dateStr);
     if (!r || !day || !day.vip) return { available: false, pct: 0, estimatedSavings: 0 };
 
     const mealName = this.slotToMeal(mealSlot);
     if (r.vipDiscountPct > 0 && r.vipDiscountMeals && r.vipDiscountMeals.includes(mealName)) {
-      const price = (r.avgAdultPrice || 40) * 3 + (r.avgKidPrice || 15);
+      const diners = dinerIds && dinerIds.length ? dinerIds : this.defaultDiners();
+      const price = this.costForDiners(r, diners) || (40 * 3 + 15);
       const savings = Math.round(price * (r.vipDiscountPct / 100));
       return { available: true, pct: r.vipDiscountPct, estimatedSavings: savings };
     }
@@ -146,7 +177,7 @@ const CreditEngine = {
     return conflicts;
   },
 
-  // C6: OOP with committed vs projected split
+  // C6: OOP with committed vs projected split — F1: diners-aware
   estimateOOPDetailed(planState) {
     let committed = 0;
     let vipSavings = 0;
@@ -157,7 +188,7 @@ const CreditEngine = {
         if (!sel || sel.paymentMethod === 'ddp') return;
         const r = this._getRestaurant(sel.restaurantId);
         if (!r) return;
-        const fullPrice = (r.avgAdultPrice || 0) * 3 + (r.avgKidPrice || 0);
+        const fullPrice = this.costForDiners(r, this.selectionDiners(sel));
         let price = fullPrice;
         if (sel.paymentMethod === 'vip') {
           const discount = fullPrice * (r.vipDiscountPct || 0) / 100;
@@ -180,12 +211,13 @@ const CreditEngine = {
     };
   },
 
-  // C5: AP discount info for a restaurant+date+slot
-  getAPInfo(restaurantId, dateStr, mealSlot) {
+  // C5: AP discount info for a restaurant+date+slot — F1: diners-aware
+  getAPInfo(restaurantId, dateStr, mealSlot, dinerIds) {
     const r = this._getRestaurant(restaurantId);
     if (!r || !r.apDiscountPct) return { available: false, pct: 0, estimatedSavings: 0 };
 
-    const price = (r.avgAdultPrice || 40) * 3 + (r.avgKidPrice || 15);
+    const diners = dinerIds && dinerIds.length ? dinerIds : this.defaultDiners();
+    const price = this.costForDiners(r, diners) || (40 * 3 + 15);
     const savings = Math.round(price * (r.apDiscountPct / 100));
     return {
       available: true,

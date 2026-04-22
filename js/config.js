@@ -1,4 +1,4 @@
-const APP_VERSION = '1.5.3';
+const APP_VERSION = '1.5.4';
 const APP_BUILD = 'aeaa97d';
 
 const FAMILY = [

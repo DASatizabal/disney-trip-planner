@@ -314,6 +314,35 @@
     </div>
   </div>
 
+  <!-- F1: Diners Edit Modal -->
+  <div class="modal-backdrop" id="diners-modal">
+    <div class="modal-content" style="max-width:420px;">
+      <div class="p-3 border-b border-white/10 flex items-center justify-between">
+        <div>
+          <h3 class="text-sm font-bold">Who's dining?</h3>
+          <p class="text-[11px] text-white/40 mt-0.5" id="diners-subtitle"></p>
+        </div>
+        <button onclick="Planner.closeDinersEditor()" class="p-1 hover:bg-white/10 rounded-lg">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+      <div class="p-4">
+        <div class="flex gap-1 mb-3">
+          <button onclick="Planner._dinersSelectAll()" class="text-[10px] px-2 py-1 rounded bg-white/5 hover:bg-white/10 border border-white/10">All</button>
+          <button onclick="Planner._dinersAdultsOnly()" class="text-[10px] px-2 py-1 rounded bg-white/5 hover:bg-white/10 border border-white/10">Adults only</button>
+          <button onclick="Planner._dinersKidsOnly()" class="text-[10px] px-2 py-1 rounded bg-white/5 hover:bg-white/10 border border-white/10">Kids only</button>
+          <button onclick="Planner._dinersClear()" class="text-[10px] px-2 py-1 rounded bg-white/5 hover:bg-white/10 border border-white/10">None</button>
+        </div>
+        <div class="space-y-1.5" id="diners-list"></div>
+        <p class="text-[11px] text-white/40 mt-3" id="diners-summary"></p>
+      </div>
+      <div class="p-3 border-t border-white/10 flex gap-2">
+        <button onclick="Planner.closeDinersEditor()" class="flex-1 px-3 py-2 text-xs rounded-lg bg-white/5 hover:bg-white/10 transition-colors">Cancel</button>
+        <button onclick="Planner.saveDinersEdit()" class="flex-1 px-3 py-2 text-xs rounded-lg bg-blue-500/80 hover:bg-blue-500 text-white font-medium transition-colors">Save</button>
+      </div>
+    </div>
+  </div>
+
   <!-- E5: What's New Modal -->
   <div class="modal-backdrop" id="whatsnew-modal">
     <div class="modal-content" style="max-width:450px;">

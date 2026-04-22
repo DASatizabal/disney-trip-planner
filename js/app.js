@@ -385,6 +385,12 @@ const App = {
 
   // E5: What's New
   _releaseNotes: [
+    { version: '1.5.4', date: '2026-04-22', notes: [
+      'Credit math now counts per-diner: a family meal burns one credit per person, not one per selection',
+      'OOP cost math uses actual diner composition (adults vs kids) instead of hardcoded 3+1',
+      'Click the diner badge on any slot to edit who is dining (Adults only / Kids only / All shortcuts)',
+      'New selections default to the whole family; previously-saved selections migrate on first read'
+    ]},
     { version: '1.5.3', date: '2026-04-22', notes: [
       'Picker defaults to paired resort on water park days (water parks do not serve most meals)',
       'Self-heal orphaned meal selections so slots no longer vanish when a restaurant id goes stale'

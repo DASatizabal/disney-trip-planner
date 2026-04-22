@@ -213,6 +213,19 @@ const Planner = {
     const apBadge = (r.apDiscountPct && sel.paymentMethod !== 'ap')
       ? `<span class="text-[9px] text-amber-400/50">AP ${r.apDiscountPct}%</span>` : '';
 
+    // F1: Diner count badge — shows N (number of diners) with click-to-edit
+    const diners = CreditEngine.selectionDiners(sel);
+    const credits = CreditEngine.countCreditsForSelection(sel, r);
+    const dinerTitle = diners.map(id => {
+      const m = FAMILY.find(f => f.id === id);
+      return m ? m.name : id;
+    }).join(', ');
+    const dinerBadge = `<button onclick="event.stopPropagation(); Planner.openDinersEditor('${td.date}', '${slot}')"
+      class="text-[9px] px-1 py-0 rounded border border-white/10 text-white/50 hover:text-white/80 hover:border-white/30 transition-colors"
+      title="${dinerTitle}">
+      <i data-lucide="users" class="w-2.5 h-2.5 inline -mt-0.5"></i> ${diners.length}${credits && sel.paymentMethod === 'ddp' ? '·' + credits : ''}
+    </button>`;
+
     // D3: Inline location mismatch check
     const dayPark = day.splitDay && day.splitParks
       ? (slot === 'dinner' || slot.startsWith('snack3') || slot.startsWith('snack4') ? day.splitParks.pm : day.splitParks.am)
@@ -232,6 +245,7 @@ const Planner = {
             <div class="flex items-center gap-1 mt-0.5 flex-wrap">
               <span class="badge ${badgeClass}">${r.creditType}</span>
               ${payBadge}
+              ${dinerBadge}
               ${apBadge}
               ${r.seafoodWarning ? '<span class="badge badge-seafood" title="Seafood - Lisa allergy">SEAFOOD</span>' : ''}
               ${r.familyReview === 'loved' ? '<span class="badge badge-loved">LOVED</span>' : ''}
@@ -405,9 +419,11 @@ const Planner = {
   },
 
   _applySelection(date, slot, restaurantId, paymentMethod, pool) {
+    // F1: New selections default to whole-family diners
+    const diners = CreditEngine.defaultDiners();
     // B6: Check for overdraft before committing DDP selections
     if (paymentMethod === 'ddp' && pool && typeof restaurantId === 'number') {
-      const check = CreditEngine.wouldOverdraft(pool, restaurantId, this._planState);
+      const check = CreditEngine.wouldOverdraft(pool, restaurantId, this._planState, diners);
       if (!check.ok) {
         const r = CreditEngine._getRestaurant(restaurantId);
         const typeName = (check.creditType || 'ts').toUpperCase();
@@ -434,7 +450,8 @@ const Planner = {
       paymentMethod,
       pool: paymentMethod === 'ddp' ? pool : null,
       notes: '',
-      adrNumber: ''
+      adrNumber: '',
+      diners: CreditEngine.defaultDiners()
     };
 
     this._onChanged();
@@ -444,6 +461,84 @@ const Planner = {
     if (!this._planState.days[date].selections[slot]) return;
     History.push(JSON.parse(JSON.stringify(this._planState)));
     this._planState.days[date].selections[slot] = null;
+    this._onChanged();
+  },
+
+  // F1: Diners editor
+  _dinersEditing: null,
+
+  openDinersEditor(date, slot) {
+    const sel = this._planState.days[date]?.selections[slot];
+    if (!sel) return;
+    this._dinersEditing = { date, slot, diners: [...CreditEngine.selectionDiners(sel)] };
+    const td = TRIP_DAYS.find(d => d.date === date);
+    document.getElementById('diners-subtitle').textContent = `${td?.dow || date} — ${MEAL_LABELS[slot]}`;
+    this._renderDinersList();
+    document.getElementById('diners-modal').classList.add('active');
+    lucide.createIcons();
+  },
+
+  closeDinersEditor() {
+    this._dinersEditing = null;
+    document.getElementById('diners-modal').classList.remove('active');
+  },
+
+  _renderDinersList() {
+    const state = this._dinersEditing;
+    if (!state) return;
+    const list = document.getElementById('diners-list');
+    list.innerHTML = FAMILY.map(m => {
+      const checked = state.diners.includes(m.id);
+      const ageLabel = m.age === 'adult' ? 'Adult' : `Age ${m.age}`;
+      return `
+        <label class="flex items-center gap-2 px-2 py-1.5 rounded border border-white/10 hover:bg-white/5 cursor-pointer">
+          <input type="checkbox" ${checked ? 'checked' : ''} onchange="Planner._dinersToggle('${m.id}')" class="accent-blue-500">
+          <span class="text-sm font-medium">${m.name}</span>
+          <span class="text-[10px] text-white/40">${ageLabel}${m.ddpFree ? ' · package-free' : ''}</span>
+        </label>
+      `;
+    }).join('');
+    // Credit + cost summary
+    const sel = this._planState.days[state.date].selections[state.slot];
+    const r = CreditEngine._getRestaurant(sel.restaurantId);
+    const summary = [];
+    if (r && r.creditCategory !== 'oop') {
+      const credits = r.creditsConsumed * state.diners.length;
+      summary.push(`${credits} ${r.creditType} credit${credits !== 1 ? 's' : ''}`);
+    }
+    if (r) {
+      const gross = CreditEngine.costForDiners(r, state.diners);
+      if (gross > 0) summary.push(`~$${Math.round(gross)} gross`);
+    }
+    document.getElementById('diners-summary').textContent = summary.join(' · ');
+  },
+
+  _dinersToggle(id) {
+    const state = this._dinersEditing;
+    if (!state) return;
+    const idx = state.diners.indexOf(id);
+    if (idx >= 0) state.diners.splice(idx, 1);
+    else state.diners.push(id);
+    this._renderDinersList();
+  },
+
+  _dinersSelectAll() { if (this._dinersEditing) { this._dinersEditing.diners = FAMILY.map(m => m.id); this._renderDinersList(); } },
+  _dinersAdultsOnly() { if (this._dinersEditing) { this._dinersEditing.diners = FAMILY.filter(m => CreditEngine.isAdult(m)).map(m => m.id); this._renderDinersList(); } },
+  _dinersKidsOnly() { if (this._dinersEditing) { this._dinersEditing.diners = FAMILY.filter(m => !CreditEngine.isAdult(m)).map(m => m.id); this._renderDinersList(); } },
+  _dinersClear() { if (this._dinersEditing) { this._dinersEditing.diners = []; this._renderDinersList(); } },
+
+  saveDinersEdit() {
+    const state = this._dinersEditing;
+    if (!state) return;
+    const sel = this._planState.days[state.date]?.selections[state.slot];
+    if (!sel) { this.closeDinersEditor(); return; }
+    if (state.diners.length === 0) {
+      App.toast('Pick at least one diner, or remove the whole selection', 'warning');
+      return;
+    }
+    History.push(JSON.parse(JSON.stringify(this._planState)));
+    sel.diners = [...state.diners];
+    this.closeDinersEditor();
     this._onChanged();
   },
 
