@@ -385,6 +385,9 @@ const App = {
 
   // E5: What's New
   _releaseNotes: [
+    { version: '1.5.2', date: '2026-04-22', notes: [
+      'Park assignments optimized based on crowd calendar'
+    ]},
     { version: '1.5.0', date: '2026-04-20', notes: [
       'Resolver modal: swap or remove stranded selections when changing parks',
       'AP discount as a payment option alongside VIP and DDP',

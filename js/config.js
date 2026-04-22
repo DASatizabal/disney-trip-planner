@@ -1,4 +1,4 @@
-const APP_VERSION = '1.5.0';
+const APP_VERSION = '1.5.2';
 const APP_BUILD = 'aeaa97d';
 
 const FAMILY = [
@@ -22,14 +22,14 @@ const POOLS = {
 };
 
 const TRIP_DAYS = [
-  { date: '2026-06-05', dow: 'Friday',    pool: 'A', defaultPark: 'none',              vip: false, isCheckin: true,  isCheckout: false, notes: 'Drive up from Florida City. Arrive ~noon. PO check-in 3pm' },
-  { date: '2026-06-06', dow: 'Saturday',  pool: 'A', defaultPark: 'none',              vip: false, isCheckin: false, isCheckout: false, notes: 'Open day. Water park? Disney Springs?' },
-  { date: '2026-06-07', dow: 'Sunday',    pool: 'A', defaultPark: 'EPCOT',             vip: false, isCheckin: false, isCheckout: false, notes: 'Space 220 day!' },
-  { date: '2026-06-08', dow: 'Monday',    pool: 'B', defaultPark: 'Hollywood Studios', vip: true,  isCheckin: true,  isCheckout: true,  overlapPool: 'A', notes: 'AoA check-in. Both buckets valid!' },
-  { date: '2026-06-09', dow: 'Tuesday',   pool: 'B', defaultPark: 'Magic Kingdom',     vip: true,  isCheckin: false, isCheckout: false, notes: 'Harmony Barber Shop 2pm (both boys)' },
-  { date: '2026-06-10', dow: 'Wednesday', pool: 'B', defaultPark: 'Animal Kingdom',    vip: true,  isCheckin: false, isCheckout: false, notes: 'Half day + park hop' },
-  { date: '2026-06-11', dow: 'Thursday',  pool: 'B', defaultPark: 'Magic Kingdom',     vip: true,  isCheckin: false, isCheckout: false, notes: 'MK Day 2. Last VIP day' },
-  { date: '2026-06-12', dow: 'Friday',    pool: 'B', defaultPark: 'Hollywood Studios', vip: false, isCheckin: false, isCheckout: true,  notes: 'Checkout 11am. Credits expire midnight' }
+  { date: '2026-06-05', dow: 'Friday',    pool: 'A', defaultPark: 'Water Park - Typhoon Lagoon', vip: false, isCheckin: true,  isCheckout: false, notes: 'Leave 6am, 4hr drive, check in 10am at PO. Typhoon Lagoon afternoon. HS backup if water park closed' },
+  { date: '2026-06-06', dow: 'Saturday',  pool: 'A', defaultPark: 'Water Park - Typhoon Lagoon', vip: false, isCheckin: false, isCheckout: false, notes: 'Water park primary. Storm/lightning closure backup = any park reservation' },
+  { date: '2026-06-07', dow: 'Sunday',    pool: 'A', defaultPark: 'EPCOT',                       vip: false, isCheckin: false, isCheckout: false, notes: 'Space 220 day' },
+  { date: '2026-06-08', dow: 'Monday',    pool: 'B', defaultPark: 'Hollywood Studios',           vip: true,  isCheckin: true,  isCheckout: true,  overlapPool: 'A', notes: 'AoA check-in. Green crowd for HS. Both buckets valid today' },
+  { date: '2026-06-09', dow: 'Tuesday',   pool: 'B', defaultPark: 'Magic Kingdom',               vip: true,  isCheckin: false, isCheckout: false, notes: 'Harmony Barber Shop 2pm LOCKED. Boys haircuts' },
+  { date: '2026-06-10', dow: 'Wednesday', pool: 'B', defaultPark: 'Magic Kingdom',               vip: true,  isCheckin: false, isCheckout: false, notes: 'MK Day 2. Green crowd. Disney After Hours in evening shortens regular hours' },
+  { date: '2026-06-11', dow: 'Thursday',  pool: 'B', defaultPark: 'Animal Kingdom',              vip: true,  isCheckin: false, isCheckout: false, notes: 'AK full day. Green crowd. Last VIP day. AK closes 6pm so pool/Springs evening' },
+  { date: '2026-06-12', dow: 'Friday',    pool: 'B', defaultPark: 'Hollywood Studios',           vip: false, isCheckin: false, isCheckout: true,  notes: 'Checkout 11am, bags to bell services. HS till midnight close. Drive home after midnight' }
 ];
 
 const PARK_OPTIONS = [
