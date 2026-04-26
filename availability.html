@@ -170,6 +170,20 @@
       return { '1TS':'badge-ts', '2TS':'badge-2ts', 'QS':'badge-qs', 'SN':'badge-sn', 'OOP':'badge-oop' }[t] || '';
     }
 
+    const MEAL_ABBR = { breakfast: 'B', lunch: 'L', dinner: 'D', brunch: 'Br' };
+    function vipMealsShort(meals) {
+      if (!meals || !meals.length) return '';
+      return meals.map(m => MEAL_ABBR[m] || (m[0] || '').toUpperCase()).join(',');
+    }
+    function vipBadge(r) {
+      if (!r.vipDiscountPct) return '';
+      const short = vipMealsShort(r.vipDiscountMeals);
+      const fullMeals = (r.vipDiscountMeals || []).join(', ') || 'all meals';
+      const note = r.vipDiscountNotes || 'Mon–Thu only';
+      const tooltip = `${r.vipDiscountPct}% VIP off ${fullMeals} — ${note}`;
+      return `<span class="badge badge-vip" title="${attr(tooltip)}">${r.vipDiscountPct}% VIP${short ? ' ' + short : ''}</span>`;
+    }
+
     function shortPark(p) {
       if (!p) return '';
       return p
@@ -217,7 +231,10 @@
                 <div class="text-sm font-semibold truncate">${esc(r.name)}</div>
                 <div class="text-[10px] text-white/40">${esc(meta)}</div>
               </div>
-              ${r.creditType ? `<span class="badge ${badgeCls(r.creditType)} flex-shrink-0">${r.creditType}</span>` : ''}
+              <div class="flex items-center gap-1 flex-shrink-0 flex-wrap justify-end">
+                ${vipBadge(r)}
+                ${r.creditType ? `<span class="badge ${badgeCls(r.creditType)}">${r.creditType}</span>` : ''}
+              </div>
             </div>
             <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
               ${cells}
@@ -251,7 +268,10 @@
           <td class="name-col px-3 py-2 align-top min-w-[200px]">
             <div class="text-xs font-medium">${esc(r.name)}</div>
             <div class="text-[10px] text-white/40">${esc(r.location || '')}</div>
-            ${r.creditType ? `<span class="badge ${badgeCls(r.creditType)} mt-1 inline-block">${r.creditType}</span>` : ''}
+            <div class="mt-1 flex flex-wrap gap-1">
+              ${r.creditType ? `<span class="badge ${badgeCls(r.creditType)}">${r.creditType}</span>` : ''}
+              ${vipBadge(r)}
+            </div>
           </td>
           ${cells}
         </tr>`;
