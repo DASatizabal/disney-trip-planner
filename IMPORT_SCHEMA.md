@@ -412,14 +412,46 @@ Any other date key will be stored but never displayed (the matrix only shows the
 
 ## Time string format
 
-Cell values are **strings**, not arrays. Format is whatever reads naturally to a human glancing at the matrix. Examples that all work:
+Cell values are **strings**, not arrays. Tokens are **comma-separated**; each token is one available time (or a brief note). The page renders one chip per token, grouped by meal (breakfast / lunch / dinner) with a divider line between groups.
+
+### Recommended token forms
+
+| Token | Effect |
+|---|---|
+| `8:00`, `8:30`, `12:30` | Plain time (12-hour or 24-hour) |
+| `8:00a`, `8:30am`, `6:30p`, `6:30pm` | With am/pm marker — eliminates ambiguity |
+| `18:30` | 24-hour form is fine — interpreted directly |
+| `sold out`, `walk-up only`, `none` | Free-text — rendered as a chip, classified as "unknown" meal |
+
+Examples that all work as cell values:
 
 - `"8:00, 8:30, 9:15"`
 - `"8:00a, 8:30a, 9:15a"`
-- `"8:00 - 8:30"` (range)
-- `"sold out"` or `"none"` (notes are fine — anything stored as a string is shown verbatim)
+- `"6:30p, 7:00p, 7:30p"`
+- `"sold out"`
 
-Recommended convention: comma-separated 12-hour times in user-friendly form (e.g. `"8:00, 8:30, 9:15a"` or `"6:30p, 7:00p, 7:30p"`). Be consistent within a single import.
+Recommended convention: comma-separated, with am/pm markers (e.g. `"8:00a, 8:30a, 9:15a"` or `"6:30p, 7:00p"`). Be consistent within a single import.
+
+### Picked marker (`*` prefix)
+
+A token may start with a `*` to indicate the user has *picked* that time as their preferred choice (gold highlight in the UI). Example:
+
+- `"8:00, *8:30, 9:15"` — 8:30 is the picked one
+
+The picked state has no effect on the planner unless the user clicks **Book** in the UI — it's just a visual marker. Use this only when you have a strong reason to pre-select a time; otherwise leave it off and let the user click.
+
+### Meal grouping
+
+The UI auto-classifies each token's time into a meal group:
+
+| Time | Meal group |
+|---|---|
+| Before 11:00 | Breakfast |
+| 11:00 – 16:29 | Lunch |
+| 16:30 and later | Dinner |
+| Unparseable / free text | Unknown |
+
+You don't need to order tokens — the UI sorts them within each group. But if you order them by time anyway, the export round-trip will preserve that.
 
 ## Merge semantics
 
@@ -452,12 +484,30 @@ A reasonable response:
 }
 ```
 
+## "Book" button (UI only — not part of the import file)
+
+Each cell has a **Book** button that appears when one chip is picked. Clicking it writes a real selection into the active scenario's plan in `localStorage` (the same data the planner uses), with these defaults:
+
+- **Slot**: derived from the picked time — breakfast / lunch / dinner. Snack-credit restaurants go in the first empty `snack1`–`snack4` slot.
+- **Pool**: the day's primary pool from `TRIP_DAYS`.
+- **Payment method**: `ddp` if the restaurant accepts DDP, else `oop`.
+- **Diners**: all four (`david`, `lisa`, `dante`, `djr`).
+- **Time**: normalized to `"HH:MM"` 24-hour.
+- **ADR / notes**: empty (edit in the planner if needed).
+
+If the slot already holds a different restaurant, the user is asked to confirm the overwrite. Booked chips show a green ring + "✓" and the cell offers an **Unbook** link.
+
+CSV-only restaurants (rid `"csv:..."`) cannot be booked from this page — the planner needs a numeric DB id. The Book button is disabled for those.
+
+This whole flow is UI-driven; nothing about it appears in the import file. The import file just seeds the available times — the user decides what to book.
+
 ## Validation checklist (Claude should self-check before producing output)
 
 - [ ] Top-level value is an object (not an array, not a wrapped `plan`/`days` shape — that's the Part 1 schema)
 - [ ] Every key starts with `"db:"` (followed by a positive integer) or `"csv:"` (followed by a non-empty name)
 - [ ] Every nested key is a valid trip date in `YYYY-MM-DD` form, drawn from the 8 allowed dates
 - [ ] Every cell value is a **string** (not an array, not a number, not null)
+- [ ] Tokens within a cell value are separated by commas. Optional `*` prefix marks a picked token
 - [ ] No comments inside the JSON (JSON doesn't support them — use a separate prose explanation alongside the file)
 - [ ] If user-provided names are ambiguous and you can't pin them to a `db:<id>`, ask before using a `csv:<name>` fallback — the wrong name silently misses
 

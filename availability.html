@@ -21,35 +21,109 @@
     .row-oop { border-left: 3px solid var(--oop); }
     .row-unknown { border-left: 3px solid rgba(255,255,255,0.1); }
 
-    .avail-input {
-      width: 100%;
-      min-height: 36px;
-      resize: vertical;
-      background: rgba(255,255,255,0.04);
-      border: 1px solid rgba(255,255,255,0.08);
+    .chip-cell {
+      min-height: 40px;
+      background: rgba(255,255,255,0.025);
+      border: 1px solid rgba(255,255,255,0.06);
       border-radius: 6px;
-      padding: 4px 6px;
+      padding: 4px;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+    .chip-cell.has-data {
+      background: rgba(251,191,36,0.05);
+      border-color: rgba(251,191,36,0.25);
+    }
+    .chip-cell.has-confirmed {
+      background: rgba(34,197,94,0.06);
+      border-color: rgba(34,197,94,0.35);
+    }
+    .chip-row { display: flex; flex-wrap: wrap; gap: 3px; align-items: center; }
+    .meal-divider {
+      height: 1px;
+      background: rgba(255,255,255,0.08);
+      margin: 1px 2px;
+    }
+    body.light-mode .meal-divider { background: rgba(0,0,0,0.1); }
+    .time-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 2px;
+      padding: 1px 4px 1px 7px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.07);
+      border: 1px solid rgba(255,255,255,0.14);
+      font-size: 10px;
+      line-height: 1.4;
+      cursor: pointer;
+      user-select: none;
+      transition: background 0.1s, border-color 0.1s;
+    }
+    .time-chip:hover { background: rgba(255,255,255,0.12); border-color: rgba(255,255,255,0.25); }
+    .time-chip.picked {
+      background: rgba(251,191,36,0.3);
+      border-color: rgba(251,191,36,0.7);
+      color: #fde68a;
+    }
+    .time-chip.confirmed {
+      background: rgba(34,197,94,0.25);
+      border-color: rgba(34,197,94,0.7);
+      color: #bbf7d0;
+    }
+    .time-chip.confirmed.picked {
+      background: rgba(34,197,94,0.4);
+      border-color: rgba(34,197,94,0.9);
+    }
+    .time-chip .chip-x {
+      color: rgba(255,255,255,0.35);
+      padding: 0 3px;
       font-size: 11px;
-      line-height: 1.3;
-      color: white;
+      line-height: 1;
+      cursor: pointer;
+    }
+    .time-chip .chip-x:hover { color: #f87171; }
+    body.light-mode .time-chip { background: rgba(0,0,0,0.05); border-color: rgba(0,0,0,0.12); color: #1e293b; }
+    body.light-mode .time-chip:hover { background: rgba(0,0,0,0.1); }
+    body.light-mode .time-chip.picked { background: rgba(251,191,36,0.4); border-color: rgba(217,119,6,0.7); color: #78350f; }
+    body.light-mode .time-chip.confirmed { background: rgba(34,197,94,0.3); border-color: rgba(21,128,61,0.7); color: #14532d; }
+    .chip-add {
+      background: transparent;
+      border: 1px dashed rgba(255,255,255,0.18);
+      border-radius: 999px;
+      padding: 1px 7px;
+      font-size: 10px;
+      color: rgba(255,255,255,0.45);
+      width: 70px;
+      outline: none;
       font-family: inherit;
     }
-    .avail-input:focus {
-      outline: none;
-      border-color: rgba(251,191,36,0.5);
-      background: rgba(255,255,255,0.07);
+    .chip-add::placeholder { color: rgba(255,255,255,0.25); }
+    .chip-add:focus { border-color: rgba(251,191,36,0.5); border-style: solid; color: white; width: 100px; }
+    body.light-mode .chip-add { border-color: rgba(0,0,0,0.2); color: rgba(0,0,0,0.5); }
+    body.light-mode .chip-add::placeholder { color: rgba(0,0,0,0.35); }
+    body.light-mode .chip-add:focus { color: #1e293b; }
+    .confirm-row { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
+    .confirm-btn {
+      font-size: 10px; padding: 2px 7px; border-radius: 4px;
+      background: rgba(251,191,36,0.25); border: 1px solid rgba(251,191,36,0.6);
+      color: #fde68a; cursor: pointer; font-family: inherit;
     }
-    .avail-input::placeholder { color: rgba(255,255,255,0.2); font-style: italic; }
-    .avail-input:not(:placeholder-shown) {
-      border-color: rgba(251,191,36,0.45);
-      background: rgba(251,191,36,0.08);
+    .confirm-btn:hover { background: rgba(251,191,36,0.4); }
+    .confirm-btn:disabled { opacity: 0.3; cursor: default; }
+    .booked-tag {
+      font-size: 10px; padding: 1px 6px; border-radius: 4px;
+      background: rgba(34,197,94,0.25); border: 1px solid rgba(34,197,94,0.6);
+      color: #bbf7d0; display: inline-flex; align-items: center; gap: 3px;
     }
-    body.light-mode .avail-input { background: rgba(0,0,0,0.04); border-color: rgba(0,0,0,0.1); color: #1e293b; }
-    body.light-mode .avail-input::placeholder { color: rgba(0,0,0,0.3); }
-    body.light-mode .avail-input:not(:placeholder-shown) {
-      border-color: rgba(217,119,6,0.5);
-      background: rgba(251,191,36,0.18);
+    .unbook-link {
+      font-size: 9px; color: rgba(255,255,255,0.4); cursor: pointer;
+      text-decoration: underline;
     }
+    .unbook-link:hover { color: #f87171; }
+    body.light-mode .confirm-btn { background: rgba(251,191,36,0.4); border-color: rgba(217,119,6,0.7); color: #78350f; }
+    body.light-mode .booked-tag { background: rgba(34,197,94,0.3); border-color: rgba(21,128,61,0.7); color: #14532d; }
+    body.light-mode .unbook-link { color: rgba(0,0,0,0.5); }
 
     .matrix-table { border-collapse: separate; border-spacing: 0; }
     .matrix-table th, .matrix-table td { border-bottom: 1px solid rgba(255,255,255,0.05); }
@@ -127,6 +201,7 @@
   <script src="js/restaurant-db.js"></script>
   <script src="js/csv-restaurants.js"></script>
   <script src="js/restaurant-merge.js"></script>
+  <script src="js/storage.js"></script>
   <script>
     const SHORTLIST_KEY = 'ddp_planner_shortlist';
     const AVAIL_KEY = 'ddp_planner_availability';
@@ -204,6 +279,237 @@
         .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
     }
 
+    // Time parsing — accepts "8:00", "8:00a", "8:30 PM", "18:30", "8", etc.
+    function parseTimeMinutes(s) {
+      if (!s) return null;
+      const t = String(s).trim().toLowerCase().replace(/\s+/g, '');
+      let m = t.match(/^(\d{1,2})(?::(\d{2}))?(a|p|am|pm)?$/);
+      if (!m) return null;
+      let h = parseInt(m[1], 10);
+      const mn = parseInt(m[2] || '0', 10);
+      const ampm = m[3] && m[3][0];
+      if (h > 23 || mn > 59) return null;
+      if (ampm === 'a') { if (h === 12) h = 0; }
+      else if (ampm === 'p') { if (h !== 12) h += 12; }
+      return h * 60 + mn;
+    }
+    function classifyMeal(s) {
+      const m = parseTimeMinutes(s);
+      if (m == null) return 'unknown';
+      if (m < 11 * 60) return 'breakfast';
+      if (m < 16 * 60 + 30) return 'lunch';
+      return 'dinner';
+    }
+    function normalizeHHMM(s) {
+      const m = parseTimeMinutes(s);
+      if (m == null) return null;
+      const h = Math.floor(m / 60), mn = m % 60;
+      return `${String(h).padStart(2,'0')}:${String(mn).padStart(2,'0')}`;
+    }
+
+    // Cell value parsing/serialization. Format: "*8:00, 8:30, 9:15" — comma-separated tokens, * prefix = picked.
+    function parseTokens(str) {
+      if (!str) return [];
+      return String(str).split(',').map(s => s.trim()).filter(Boolean).map(token => {
+        const picked = token.startsWith('*');
+        const time = (picked ? token.slice(1).trim() : token);
+        return { time, picked };
+      });
+    }
+    function serializeTokens(tokens) {
+      return tokens.map(t => (t.picked ? '*' : '') + t.time).join(', ');
+    }
+
+    // Active scenario plan handling — read/write the same localStorage the planner uses.
+    function loadActivePlan() {
+      const name = Storage.loadActiveScenario();
+      const plan = Storage.load(name) || Storage.getDefaultPlan();
+      return { name, plan };
+    }
+    function saveActivePlan(name, plan) {
+      plan.lastModified = new Date().toISOString();
+      Storage.save(name, plan);
+    }
+    let activePlan = loadActivePlan();
+    function refreshActivePlan() { activePlan = loadActivePlan(); }
+    // Cross-tab sync — if the planner saves while we're open, pick it up.
+    window.addEventListener('storage', e => {
+      if (!e.key) return;
+      const planKey = 'ddp_planner_' + activePlan.name;
+      if (e.key === 'ddp_planner_active' || e.key === planKey) {
+        refreshActivePlan();
+        renderEntry();
+        renderMatrix();
+        lucide.createIcons();
+      }
+    });
+
+    // Pick the slot for a confirmed selection.
+    // Snack-credit restaurants → first empty snack slot (or the slot already holding the same restaurant).
+    // Otherwise → meal slot derived from time (breakfast/lunch/dinner).
+    function pickSlot(r, time, day) {
+      if (r.creditCategory === 'sn') {
+        // If a snack slot already holds this restaurant, reuse it
+        for (const slot of MEAL_SLOTS) {
+          if (!slot.startsWith('snack')) continue;
+          const sel = day.selections[slot];
+          if (sel && sel.restaurantId === r.id) return slot;
+        }
+        // Otherwise first empty snack slot
+        for (const slot of MEAL_SLOTS) {
+          if (!slot.startsWith('snack')) continue;
+          if (!day.selections[slot]) return slot;
+        }
+        return null; // all snack slots full
+      }
+      const meal = classifyMeal(time);
+      if (meal === 'breakfast' || meal === 'lunch' || meal === 'dinner') return meal;
+      return null;
+    }
+
+    // Is the chip's (r, date, time) currently the booked selection in the active plan?
+    function isChipBooked(r, date, time) {
+      if (!r || r.id == null) return null;
+      const day = activePlan.plan.days && activePlan.plan.days[date];
+      if (!day || !day.selections) return null;
+      const target = normalizeHHMM(time);
+      if (!target) return null;
+      for (const slot of MEAL_SLOTS) {
+        const sel = day.selections[slot];
+        if (sel && sel.restaurantId === r.id && normalizeHHMM(sel.time) === target) return slot;
+      }
+      return null;
+    }
+
+    function bookSelection(r, date, time) {
+      if (!r || r.id == null) {
+        alert('Cannot confirm: this restaurant is CSV-only (no database id). Pick it directly in the planner.');
+        return false;
+      }
+      const day = activePlan.plan.days && activePlan.plan.days[date];
+      if (!day) {
+        alert('No day entry for ' + date + ' in the active plan. Open the planner first.');
+        return false;
+      }
+      const slot = pickSlot(r, time, day);
+      if (!slot) {
+        alert(r.creditCategory === 'sn'
+          ? 'All four snack slots are full for this day — clear one in the planner first.'
+          : 'Could not classify time "' + time + '" as breakfast/lunch/dinner.');
+        return false;
+      }
+      const existing = day.selections[slot];
+      if (existing && existing.restaurantId !== r.id) {
+        const existingR = allMerged.find(x => x.id === existing.restaurantId);
+        const existingName = existingR ? existingR.name : 'another restaurant';
+        if (!confirm(`The ${slot} slot on ${date} already holds ${existingName} at ${existing.time || '?'}. Replace with ${r.name} at ${time}?`)) return false;
+      }
+      const td = TRIP_DAYS.find(d => d.date === date);
+      const acceptsDDP = r.acceptsDDP !== false;
+      day.selections[slot] = {
+        restaurantId: r.id,
+        paymentMethod: acceptsDDP ? 'ddp' : 'oop',
+        pool: acceptsDDP ? (td ? td.pool : null) : null,
+        notes: '',
+        adrNumber: '',
+        diners: ['david', 'lisa', 'dante', 'djr'],
+        time: normalizeHHMM(time)
+      };
+      saveActivePlan(activePlan.name, activePlan.plan);
+      return true;
+    }
+
+    function unbookSelection(r, date) {
+      if (!r || r.id == null) return false;
+      const day = activePlan.plan.days && activePlan.plan.days[date];
+      if (!day || !day.selections) return false;
+      let cleared = false;
+      for (const slot of MEAL_SLOTS) {
+        const sel = day.selections[slot];
+        if (sel && sel.restaurantId === r.id) {
+          day.selections[slot] = null;
+          cleared = true;
+        }
+      }
+      if (cleared) saveActivePlan(activePlan.name, activePlan.plan);
+      return cleared;
+    }
+
+    // Render a chip cell's inner HTML (chips grouped by meal, add input, confirm/unbook row).
+    function renderCellInner(r, date, str) {
+      const tokens = parseTokens(str).map((t, idx) => ({
+        ...t,
+        idx,
+        meal: classifyMeal(t.time),
+        minutes: parseTimeMinutes(t.time),
+        bookedSlot: isChipBooked(r, date, t.time)
+      }));
+      const groupOrder = ['breakfast', 'lunch', 'dinner', 'unknown'];
+      const groups = {};
+      tokens.forEach(t => {
+        if (!groups[t.meal]) groups[t.meal] = [];
+        groups[t.meal].push(t);
+      });
+      Object.values(groups).forEach(g => g.sort((a, b) => (a.minutes ?? 9999) - (b.minutes ?? 9999)));
+      const presentGroups = groupOrder.filter(g => groups[g] && groups[g].length);
+      const groupHtml = presentGroups.map((g, gi) => {
+        const chips = groups[g].map(t => {
+          const cls = ['time-chip'];
+          if (t.picked) cls.push('picked');
+          if (t.bookedSlot) cls.push('confirmed');
+          const titleParts = [];
+          if (t.bookedSlot) titleParts.push('Booked in ' + t.bookedSlot);
+          if (t.picked && !t.bookedSlot) titleParts.push('Picked — click Book to confirm');
+          return `<span class="${cls.join(' ')}" data-act="pick" data-idx="${t.idx}" title="${attr(titleParts.join(' • '))}">
+            <span>${esc(t.time)}${t.bookedSlot ? ' ✓' : ''}</span>
+            <span class="chip-x" data-act="del">×</span>
+          </span>`;
+        }).join('');
+        return (gi > 0 ? '<div class="meal-divider"></div>' : '') + `<div class="chip-row">${chips}</div>`;
+      }).join('');
+
+      const pickedToken = tokens.find(t => t.picked);
+      const bookedToken = tokens.find(t => t.bookedSlot);
+      let actionRow = '';
+      if (bookedToken) {
+        actionRow = `<div class="confirm-row">
+          <span class="booked-tag" title="Saved to planner ${bookedToken.bookedSlot}">✓ Booked ${esc(bookedToken.time)}</span>
+          <span class="unbook-link" data-act="unbook">Unbook</span>
+        </div>`;
+      } else if (pickedToken) {
+        const canBook = r.id != null;
+        actionRow = `<div class="confirm-row">
+          <button class="confirm-btn" data-act="book" data-time="${attr(pickedToken.time)}" ${canBook ? '' : 'disabled title="CSV-only restaurant"'}>Book ${esc(pickedToken.time)}</button>
+        </div>`;
+      }
+
+      return `${groupHtml}
+        <div class="chip-row">
+          <input type="text" class="chip-add" placeholder="+ time" data-act="add">
+        </div>
+        ${actionRow}`;
+    }
+
+    function getCellRaw(id, date) { return (availability[id] && availability[id][date]) || ''; }
+
+    function cellClasses(r, date) {
+      const tokens = parseTokens(getCellRaw(rid(r), date));
+      const cls = ['chip-cell'];
+      if (tokens.length) cls.push('has-data');
+      if (tokens.some(t => isChipBooked(r, date, t.time))) cls.push('has-confirmed');
+      return cls.join(' ');
+    }
+
+    function rerenderCells(r, date) {
+      const id = rid(r);
+      const sel = `.chip-cell[data-id="${CSS.escape(id)}"][data-date="${date}"]`;
+      const html = renderCellInner(r, date, getCellRaw(id, date));
+      document.querySelectorAll(sel).forEach(el => {
+        el.className = cellClasses(r, date);
+        el.innerHTML = html;
+      });
+    }
+
     function renderEntry() {
       const root = document.getElementById('entry-view');
       if (!shortlist.length) { root.innerHTML = ''; return; }
@@ -218,10 +524,9 @@
                 <span class="font-semibold text-white/70">${dateShort(td)}</span>
                 <span class="text-white/30 truncate">${esc(shortPark(td.defaultPark))}</span>
               </div>
-              <textarea class="avail-input" rows="2"
-                data-id="${attr(id)}"
-                data-date="${td.date}"
-                placeholder="8:00, 8:30...">${esc(val)}</textarea>
+              <div class="${cellClasses(r, td.date)}" data-id="${attr(id)}" data-date="${td.date}">
+                ${renderCellInner(r, td.date, val)}
+              </div>
             </div>`;
         }).join('');
         return `
@@ -258,10 +563,9 @@
         const cells = TRIP_DAYS.map(td => {
           const val = (availability[id] && availability[id][td.date]) || '';
           return `<td class="px-1 py-1 align-top">
-            <textarea class="avail-input" rows="2"
-              data-id="${attr(id)}"
-              data-date="${td.date}"
-              placeholder="—">${esc(val)}</textarea>
+            <div class="${cellClasses(r, td.date)}" data-id="${attr(id)}" data-date="${td.date}">
+              ${renderCellInner(r, td.date, val)}
+            </div>
           </td>`;
         }).join('');
         return `<tr class="${rowCls(r)}">
@@ -308,17 +612,88 @@
     document.getElementById('view-entry').addEventListener('click', () => setView('entry'));
     document.getElementById('view-matrix').addEventListener('click', () => setView('matrix'));
 
-    // Save on blur — sync the corresponding cell in the other view so values stay in sync
-    document.body.addEventListener('focusout', e => {
-      if (!e.target.matches || !e.target.matches('.avail-input')) return;
-      const id   = e.target.getAttribute('data-id');
-      const date = e.target.getAttribute('data-date');
-      const val  = e.target.value;
-      setCell(id, date, val);
-      const sel = `.avail-input[data-id="${CSS.escape(id)}"][data-date="${date}"]`;
-      document.querySelectorAll(sel).forEach(el => {
-        if (el !== e.target) el.value = val;
+    // Lookup helpers used by event handlers below
+    function findRestaurantByRid(id) { return allMerged.find(r => rid(r) === id); }
+    function cellContext(target) {
+      const cell = target.closest('.chip-cell');
+      if (!cell) return null;
+      const id = cell.getAttribute('data-id');
+      const date = cell.getAttribute('data-date');
+      const r = findRestaurantByRid(id);
+      if (!r) return null;
+      return { cell, id, date, r };
+    }
+
+    // Click delegation: pick chip / delete chip / book / unbook
+    document.body.addEventListener('click', e => {
+      const ctx = cellContext(e.target);
+      if (!ctx) return;
+      const { id, date, r } = ctx;
+      const xBtn = e.target.closest('.chip-x');
+      const chip = e.target.closest('.time-chip');
+      const bookBtn = e.target.closest('[data-act="book"]');
+      const unbookLink = e.target.closest('[data-act="unbook"]');
+
+      if (bookBtn) {
+        const time = bookBtn.getAttribute('data-time');
+        if (bookSelection(r, date, time)) {
+          rerenderCells(r, date);
+        }
+        return;
+      }
+      if (unbookLink) {
+        if (unbookSelection(r, date)) rerenderCells(r, date);
+        return;
+      }
+      if (xBtn && chip) {
+        const idx = parseInt(chip.getAttribute('data-idx'), 10);
+        const tokens = parseTokens(getCellRaw(id, date));
+        tokens.splice(idx, 1);
+        setCell(id, date, serializeTokens(tokens));
+        rerenderCells(r, date);
+        e.stopPropagation();
+        return;
+      }
+      if (chip) {
+        const idx = parseInt(chip.getAttribute('data-idx'), 10);
+        const tokens = parseTokens(getCellRaw(id, date));
+        if (!tokens[idx]) return;
+        const wasPicked = tokens[idx].picked;
+        // single-pick semantics: clear all picks first, then toggle this one
+        tokens.forEach(t => { t.picked = false; });
+        tokens[idx].picked = !wasPicked;
+        setCell(id, date, serializeTokens(tokens));
+        rerenderCells(r, date);
+      }
+    });
+
+    // Add input: Enter or blur commits new time(s)
+    function commitAddInput(input) {
+      const ctx = cellContext(input);
+      if (!ctx) return;
+      const { id, date, r } = ctx;
+      const raw = input.value.trim();
+      input.value = '';
+      if (!raw) return;
+      const tokens = parseTokens(getCellRaw(id, date));
+      raw.split(',').map(s => s.trim()).filter(Boolean).forEach(t => {
+        const picked = t.startsWith('*');
+        const time = picked ? t.slice(1).trim() : t;
+        if (time) tokens.push({ time, picked });
       });
+      setCell(id, date, serializeTokens(tokens));
+      rerenderCells(r, date);
+    }
+    document.body.addEventListener('keydown', e => {
+      if (!e.target.matches || !e.target.matches('.chip-add')) return;
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        commitAddInput(e.target);
+      }
+    });
+    document.body.addEventListener('focusout', e => {
+      if (!e.target.matches || !e.target.matches('.chip-add')) return;
+      commitAddInput(e.target);
     });
 
     function exportAvailability() {
