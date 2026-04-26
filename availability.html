@@ -146,6 +146,44 @@
     .view-btn { color: rgba(255,255,255,0.5); }
     .view-btn.active { background: rgba(251,191,36,0.18); color: #fcd34d; }
     body.light-mode .view-btn.active { color: #b45309; background: rgba(251,191,36,0.25); }
+
+    .day-summary {
+      margin-top: 4px;
+      padding-top: 4px;
+      border-top: 1px solid rgba(255,255,255,0.06);
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+      font-weight: 400;
+    }
+    .ds-row {
+      display: flex;
+      align-items: baseline;
+      gap: 4px;
+      font-size: 9px;
+      line-height: 1.25;
+      max-width: 100%;
+      overflow: hidden;
+    }
+    .ds-slot {
+      display: inline-block;
+      width: 8px;
+      flex-shrink: 0;
+      color: rgba(255,255,255,0.4);
+      font-weight: 600;
+      letter-spacing: 0.02em;
+    }
+    .ds-counts {
+      display: flex;
+      gap: 6px;
+      font-size: 9px;
+      color: rgba(255,255,255,0.55);
+      margin-top: 1px;
+    }
+    .ds-count { display: inline-flex; align-items: center; gap: 2px; }
+    body.light-mode .day-summary { border-top-color: rgba(0,0,0,0.08); }
+    body.light-mode .ds-slot { color: rgba(0,0,0,0.5); }
+    body.light-mode .ds-counts { color: rgba(0,0,0,0.55); }
   </style>
 </head>
 <body class="bg-slate-950 text-white min-h-screen font-sans">
@@ -257,6 +295,61 @@
       const note = r.vipDiscountNotes || 'Mon–Thu only';
       const tooltip = `${r.vipDiscountPct}% VIP off ${fullMeals} — ${note}`;
       return `<span class="badge badge-vip" title="${attr(tooltip)}">${r.vipDiscountPct}% VIP${short ? ' ' + short : ''}</span>`;
+    }
+
+    function truncateName(name, maxLen) {
+      if (!name) return '';
+      const cleaned = name.replace(/^The\s+/i, '').replace(/\s+Restaurant$/i, '');
+      if (cleaned.length <= maxLen) return cleaned;
+      return cleaned.slice(0, Math.max(1, maxLen - 1)) + '…';
+    }
+    function summarizeDay(date) {
+      const day = activePlan.plan.days && activePlan.plan.days[date];
+      if (!day || !day.selections) return null;
+      const meal = slot => {
+        const sel = day.selections[slot];
+        if (!sel) return null;
+        const r = allMerged.find(x => x.id === sel.restaurantId);
+        return r ? r.name : '?';
+      };
+      const snackCount = ['snack1','snack2','snack3','snack4'].filter(s => day.selections[s]).length;
+      const eventCount = Array.isArray(day.events) ? day.events.length : 0;
+      return {
+        breakfast: meal('breakfast'),
+        lunch:     meal('lunch'),
+        dinner:    meal('dinner'),
+        snacks:    snackCount,
+        events:    eventCount
+      };
+    }
+    function summaryHTML(date, opts = {}) {
+      const s = summarizeDay(date);
+      if (!s) return `<div class="day-summary" data-date="${date}"></div>`;
+      const maxLen = opts.maxLen || 13;
+      const row = (label, name) => {
+        const display = name ? truncateName(name, maxLen) : '—';
+        const cls = name ? 'text-white/70' : 'text-white/25';
+        const title = name ? esc(name) : '';
+        return `<div class="ds-row">
+          <span class="ds-slot">${label}</span>
+          <span class="${cls} truncate" title="${title}">${esc(display)}</span>
+        </div>`;
+      };
+      const counts = [];
+      if (s.snacks) counts.push(`<span class="ds-count">🍪 ${s.snacks}</span>`);
+      if (s.events) counts.push(`<span class="ds-count">📌 ${s.events}</span>`);
+      const countLine = counts.length ? `<div class="ds-counts">${counts.join('')}</div>` : '';
+      return `<div class="day-summary" data-date="${date}">
+        ${row('B', s.breakfast)}
+        ${row('L', s.lunch)}
+        ${row('D', s.dinner)}
+        ${countLine}
+      </div>`;
+    }
+    function rerenderDaySummary(date) {
+      document.querySelectorAll(`.day-summary[data-date="${date}"]`).forEach(el => {
+        el.outerHTML = summaryHTML(date);
+      });
     }
 
     function shortPark(p) {
@@ -527,6 +620,7 @@
                 <span class="font-semibold text-white/70">${dateShort(td)}</span>
                 <span class="text-white/30 truncate">${esc(shortPark(td.defaultPark))}</span>
               </div>
+              ${summaryHTML(td.date, { maxLen: 11 })}
               <div class="${cellClasses(r, td.date)}" data-id="${attr(id)}" data-date="${td.date}">
                 ${renderCellInner(r, td.date, val)}
               </div>
@@ -556,9 +650,10 @@
       if (!shortlist.length) { root.innerHTML = ''; return; }
 
       const headerCells = TRIP_DAYS.map(td => `
-        <th class="px-2 py-2 text-xs text-left font-semibold min-w-[130px]">
+        <th class="px-2 py-2 text-xs text-left font-semibold min-w-[140px] align-top">
           <div>${dateShort(td)}</div>
           <div class="text-[10px] text-white/40 font-normal">${esc(shortPark(td.defaultPark))}</div>
+          ${summaryHTML(td.date)}
         </th>`).join('');
 
       const rows = shortlist.map(r => {
@@ -641,11 +736,15 @@
         const time = bookBtn.getAttribute('data-time');
         if (bookSelection(r, date, time)) {
           rerenderCells(r, date);
+          rerenderDaySummary(date);
         }
         return;
       }
       if (unbookLink) {
-        if (unbookSelection(r, date)) rerenderCells(r, date);
+        if (unbookSelection(r, date)) {
+          rerenderCells(r, date);
+          rerenderDaySummary(date);
+        }
         return;
       }
       if (xBtn && chip) {
