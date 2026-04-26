@@ -16,12 +16,20 @@ const Swipe = {
   },
 
   _onTouchStart(e) {
+    // Ignore touches that begin on a draggable element or the divider — those
+    // are pointer-driven interactions handled by Planner.
+    if (e.target.closest && e.target.closest('.split-divider-draggable, .meal-slot-filled, .timeline-event')) {
+      this._suppress = true;
+      return;
+    }
+    this._suppress = false;
     const touch = e.touches[0];
     this._startX = touch.clientX;
     this._startY = touch.clientY;
   },
 
   _onTouchEnd(e) {
+    if (this._suppress) { this._suppress = false; return; }
     const touch = e.changedTouches[0];
     const deltaX = touch.clientX - this._startX;
     const deltaY = touch.clientY - this._startY;

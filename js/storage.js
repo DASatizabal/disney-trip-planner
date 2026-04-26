@@ -11,10 +11,35 @@ const Storage = {
   load(scenarioName) {
     try {
       const raw = localStorage.getItem(`${STORAGE_PREFIX}_${scenarioName}`);
-      return raw ? JSON.parse(raw) : null;
+      if (!raw) return null;
+      const plan = JSON.parse(raw);
+      this._normalizePlan(plan);
+      return plan;
     } catch (e) {
       console.error('Failed to load plan:', e);
       return null;
+    }
+  },
+
+  _normalizePlan(plan) {
+    if (!plan || !plan.days || typeof plan.days !== 'object') return plan;
+    for (const day of Object.values(plan.days)) {
+      this._normalizeDay(day);
+    }
+    return plan;
+  },
+
+  _normalizeDay(day) {
+    if (!day) return;
+    if (typeof day.splitDividerTime === 'undefined') {
+      day.splitDividerTime = DEFAULT_SPLIT_DIVIDER_TIME;
+    }
+    if (!Array.isArray(day.events)) day.events = [];
+    if (!day.selections || typeof day.selections !== 'object') day.selections = {};
+    for (const slot of MEAL_SLOTS) {
+      if (!(slot in day.selections)) day.selections[slot] = null;
+      const sel = day.selections[slot];
+      if (sel && !sel.time) sel.time = DEFAULT_MEAL_TIMES[slot];
     }
   },
 
@@ -116,9 +141,7 @@ const Storage = {
             if (typeof day.splitDay === 'undefined') day.splitDay = false;
             if (typeof day.splitParks === 'undefined') day.splitParks = null;
             if (typeof day.notes === 'undefined') day.notes = '';
-            for (const slot of MEAL_SLOTS) {
-              if (!(slot in day.selections)) day.selections[slot] = null;
-            }
+            this._normalizeDay(day);
           }
 
           plan.version = plan.version || 1;
@@ -144,8 +167,10 @@ const Storage = {
         park: td.defaultPark,
         splitDay: false,
         splitParks: null,
+        splitDividerTime: DEFAULT_SPLIT_DIVIDER_TIME,
         notes: td.notes || '',
-        selections
+        selections,
+        events: []
       };
     });
     return {

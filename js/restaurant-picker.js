@@ -59,10 +59,9 @@ const RestaurantPicker = {
     const locations = [...new Set(all.map(r => r.location).filter(Boolean))].sort();
     sel.innerHTML = '<option value="all">All Locations</option>';
 
-    const dayPark = day.splitDay && day.splitParks
-      ? (this._mealSlot === 'dinner' || this._mealSlot.startsWith('snack3') || this._mealSlot.startsWith('snack4')
-        ? day.splitParks.pm : day.splitParks.am)
-      : day.park;
+    const slotSel = day.selections[this._mealSlot];
+    const time = (slotSel && slotSel.time) || DEFAULT_MEAL_TIMES[this._mealSlot] || '12:00';
+    const dayPark = parkForTime(day, time);
 
     const parks = ['Magic Kingdom', 'EPCOT', 'Hollywood Studios', 'Animal Kingdom', 'Disney Springs'];
     const waterParks = locations.filter(l => l.includes('Blizzard') || l.includes('Typhoon'));

@@ -79,37 +79,7 @@ const Planner = {
 
       ${day.splitDay ? this._renderSplitParks(td.date, day) : ''}
 
-      <!-- Meal slots -->
-      <div class="space-y-1.5">
-        ${day.splitDay ? '<div class="text-[10px] text-white/30 uppercase tracking-wider mt-1">Morning / Midday</div>' : ''}
-        ${this._renderSlot(td, day, 'breakfast')}
-        ${this._renderSlot(td, day, 'lunch')}
-        ${day.splitDay ? `
-          <div class="split-divider"><span>Park Hop</span></div>
-          <div class="text-[10px] text-white/30 uppercase tracking-wider">Afternoon / Evening</div>
-        ` : ''}
-        ${this._renderSlot(td, day, 'dinner')}
-        <div class="mt-2">
-          <div class="text-[10px] text-white/30 uppercase tracking-wider mb-1 flex items-center gap-1">
-            <i data-lucide="cookie" class="w-3 h-3"></i> Snacks
-            <span class="text-white/20">(${this._snackCount(day)}/4)</span>
-          </div>
-          ${day.splitDay ? `
-            <div class="text-[9px] text-white/20 mb-1">AM</div>
-            <div class="grid grid-cols-2 gap-1 mb-1">
-              ${['snack1', 'snack2'].map(s => this._renderSnackSlot(td, day, s)).join('')}
-            </div>
-            <div class="text-[9px] text-white/20 mb-1">PM</div>
-            <div class="grid grid-cols-2 gap-1">
-              ${['snack3', 'snack4'].map(s => this._renderSnackSlot(td, day, s)).join('')}
-            </div>
-          ` : `
-            <div class="grid grid-cols-2 gap-1">
-              ${['snack1', 'snack2', 'snack3', 'snack4'].map(s => this._renderSlot(td, day, s)).join('')}
-            </div>
-          `}
-        </div>
-      </div>
+      ${this._renderTimeline(td, day)}
 
       <!-- D1: Day notes — button to expand -->
       <div class="mt-2 pt-2 border-t border-white/5">
@@ -143,10 +113,9 @@ const Planner = {
 
   _renderSplitParks(date, day) {
     const sp = day.splitParks || { am: day.park, pm: day.park };
-    const ratio = day.splitRatio || { am: 50, pm: 50 };
     const parkOpts = ['Magic Kingdom', 'EPCOT', 'Hollywood Studios', 'Animal Kingdom', 'Disney Springs', 'Water Park - Typhoon Lagoon', 'Water Park - Blizzard Beach', 'Resort Day'];
     return `
-      <div class="grid grid-cols-2 gap-1 mb-1">
+      <div class="grid grid-cols-2 gap-1 mb-2">
         <select onchange="Planner.changeSplitPark('${date}', 'am', this.value)"
           class="bg-white/5 border border-white/10 rounded-lg px-1.5 py-1 text-[10px] focus:outline-none cursor-pointer">
           ${parkOpts.map(p => `<option value="${p}" ${sp.am === p ? 'selected' : ''}>${p}</option>`).join('')}
@@ -156,50 +125,121 @@ const Planner = {
           ${parkOpts.map(p => `<option value="${p}" ${sp.pm === p ? 'selected' : ''}>${p}</option>`).join('')}
         </select>
       </div>
-      <div class="flex items-center gap-1 mb-2">
-        <span class="text-[9px] text-white/30 w-6">${ratio.am}%</span>
-        <input type="range" min="10" max="90" step="10" value="${ratio.am}"
-          onchange="Planner.changeSplitRatio('${date}', this.value)"
-          class="flex-1 h-1 appearance-none bg-white/10 rounded cursor-pointer" style="accent-color: var(--pool-a);">
-        <span class="text-[9px] text-white/30 w-6 text-right">${ratio.pm}%</span>
+    `;
+  },
+
+  // Build a time-sorted timeline of meals + events for one day.
+  _buildTimeline(day) {
+    const items = [];
+    MEAL_SLOTS.forEach(slot => {
+      const sel = day.selections[slot];
+      if (sel) {
+        items.push({
+          kind: 'meal',
+          slot,
+          time: sel.time || DEFAULT_MEAL_TIMES[slot],
+          sel
+        });
+      }
+    });
+    (day.events || []).forEach(ev => {
+      items.push({ kind: 'event', time: ev.time || '12:00', ev });
+    });
+    items.sort((a, b) => {
+      const t = a.time.localeCompare(b.time);
+      if (t !== 0) return t;
+      // Stable tiebreaker: meals before events at same time
+      if (a.kind !== b.kind) return a.kind === 'meal' ? -1 : 1;
+      return 0;
+    });
+    return items;
+  },
+
+  _renderTimeline(td, day) {
+    const items = this._buildTimeline(day);
+    const dividerTime = day.splitDividerTime || DEFAULT_SPLIT_DIVIDER_TIME;
+    let dividerInserted = false;
+
+    const itemsHtml = items.map(item => {
+      let prefix = '';
+      if (day.splitDay && !dividerInserted && item.time >= dividerTime) {
+        dividerInserted = true;
+        prefix = this._renderSplitDivider(td.date, day);
+      }
+      const itemHtml = item.kind === 'meal'
+        ? this._renderTimelineMeal(td, day, item.slot, item.sel)
+        : this._renderTimelineEvent(td.date, item.ev);
+      return prefix + itemHtml;
+    }).join('');
+
+    const trailingDivider = day.splitDay && !dividerInserted
+      ? this._renderSplitDivider(td.date, day)
+      : '';
+
+    const filledMeals = MEAL_SLOTS.filter(s => day.selections[s]);
+    const emptyMeals = MEAL_SLOTS.filter(s => !day.selections[s]);
+
+    const addRow = `
+      <div class="timeline-add-row">
+        ${emptyMeals.length > 0 ? `
+          <button class="timeline-add-btn" onclick="Planner.openMealSlotPicker('${td.date}')">
+            <i data-lucide="plus" class="w-3 h-3"></i> Add meal
+          </button>
+        ` : ''}
+        <button class="timeline-add-btn" onclick="Planner.openEventEditor('${td.date}')">
+          <i data-lucide="calendar-plus" class="w-3 h-3"></i> Add event
+        </button>
+      </div>
+    `;
+
+    const emptyDropTargets = `
+      <div class="timeline-empty-slots">
+        <div class="timeline-empty-slots-label">Drop targets</div>
+        ${emptyMeals.map(s => `
+          <div class="meal-slot meal-slot-empty drop-target-meal flex items-center justify-center gap-1 text-white/30"
+               data-date="${td.date}" data-slot="${s}">
+            <i data-lucide="plus" class="w-3 h-3"></i>
+            <span class="text-[10px]">${MEAL_LABELS[s]}</span>
+          </div>
+        `).join('')}
+      </div>
+    `;
+
+    return `
+      <div class="space-y-1.5 relative" data-day-timeline="${td.date}">
+        ${itemsHtml || (day.splitDay ? '' : '<div class="text-[10px] text-white/25 text-center py-2">No meals or events yet</div>')}
+        ${trailingDivider}
+        ${addRow}
+        ${emptyDropTargets}
       </div>
     `;
   },
 
-  changeSplitRatio(date, amPct) {
-    const am = parseInt(amPct);
-    this._planState.days[date].splitRatio = { am, pm: 100 - am };
-    Scenarios.save(this._planState);
-    this.render();
-    lucide.createIcons();
-  },
-
-  _renderSlot(td, day, slot) {
-    const sel = day.selections[slot];
-    const isSnack = slot.startsWith('snack');
-
-    const emptyPlaceholder = () => `
-      <div class="meal-slot meal-slot-empty flex items-center justify-center gap-1 text-white/20 hover:text-white/40 ${isSnack ? 'py-2' : 'py-3'}"
-           onclick="Planner.onSlotClick('${td.date}', '${slot}')">
-        <i data-lucide="plus" class="w-3 h-3"></i>
-        <span class="text-[10px]">${isSnack ? '' : MEAL_LABELS[slot]}</span>
+  _renderSplitDivider(date, day) {
+    const time = day.splitDividerTime || DEFAULT_SPLIT_DIVIDER_TIME;
+    return `
+      <div class="split-divider-draggable" data-date="${date}"
+           onpointerdown="Planner._beginDividerDrag(event, '${date}')">
+        <span class="divider-label">
+          <i data-lucide="grip-horizontal" class="w-3 h-3"></i>
+          Park Hop · ${formatTime12h(time)}
+        </span>
       </div>
     `;
+  },
 
-    if (!sel) return emptyPlaceholder();
-
+  _renderTimelineMeal(td, day, slot, sel) {
     let r = CreditEngine._getRestaurant(sel.restaurantId);
-    // Fallback for CSV-only entries (string IDs)
     if (!r && typeof sel.restaurantId === 'string') {
       const name = sel.restaurantId.replace(/^_csv_/, '').replace(/_/g, ' ');
       r = RestaurantMerge.findByName(name);
     }
-    // Self-heal: clear the stale selection so state doesn't stay broken
     if (!r) {
       day.selections[slot] = null;
-      return emptyPlaceholder();
+      return '';
     }
 
+    const time = sel.time || DEFAULT_MEAL_TIMES[slot];
     const badgeClass = this._creditBadgeClass(r.creditType);
     const payBadge = sel.paymentMethod === 'ddp'
       ? `<span class="badge badge-pool-${(sel.pool || td.pool).toLowerCase()}">DDP ${sel.pool || td.pool}</span>`
@@ -209,38 +249,37 @@ const Planner = {
           ? '<span class="badge badge-vip">AP</span>'
           : '<span class="badge badge-oop">OOP</span>';
 
-    // C5: AP discount badge
     const apBadge = (r.apDiscountPct && sel.paymentMethod !== 'ap')
       ? `<span class="text-[9px] text-amber-400/50">AP ${r.apDiscountPct}%</span>` : '';
 
-    // F1: Diner count badge — shows N (number of diners) with click-to-edit
     const diners = CreditEngine.selectionDiners(sel);
     const credits = CreditEngine.countCreditsForSelection(sel, r);
     const dinerTitle = diners.map(id => {
       const m = FAMILY.find(f => f.id === id);
       return m ? m.name : id;
     }).join(', ');
-    const dinerBadge = `<button onclick="event.stopPropagation(); Planner.openDinersEditor('${td.date}', '${slot}')"
+    const dinerBadge = `<button draggable="false" onclick="event.stopPropagation(); Planner.openDinersEditor('${td.date}', '${slot}')"
       class="text-[9px] px-1 py-0 rounded border border-white/10 text-white/50 hover:text-white/80 hover:border-white/30 transition-colors"
       title="${dinerTitle}">
       <i data-lucide="users" class="w-2.5 h-2.5 inline -mt-0.5"></i> ${diners.length}${credits && sel.paymentMethod === 'ddp' ? '·' + credits : ''}
     </button>`;
 
-    // D3: Inline location mismatch check
-    const dayPark = day.splitDay && day.splitParks
-      ? (slot === 'dinner' || slot.startsWith('snack3') || slot.startsWith('snack4') ? day.splitParks.pm : day.splitParks.am)
-      : day.park;
+    const dayPark = parkForTime(day, time);
     const isParkRestaurant = ['Magic Kingdom', 'EPCOT', 'Hollywood Studios', 'Animal Kingdom', 'Disney Springs'].includes(r.location);
     const isMismatch = isParkRestaurant && dayPark && dayPark !== 'none' && !dayPark.startsWith('Resort') && !dayPark.startsWith('Travel') && !dayPark.startsWith('Split') && r.location !== dayPark;
     const mismatchClass = isMismatch ? 'meal-slot-mismatch' : '';
     const mismatchIcon = isMismatch ? '<i data-lucide="map-pin-off" class="w-3 h-3 text-amber-400/60 flex-shrink-0" title="Different park"></i>' : '';
 
     return `
-      <div class="meal-slot meal-slot-filled relative group ${mismatchClass} ${isSnack ? '' : ''}"
+      <div class="meal-slot meal-slot-filled relative group ${mismatchClass}"
+           draggable="true"
+           data-date="${td.date}" data-slot="${slot}"
            onclick="Planner.onSlotClick('${td.date}', '${slot}')">
         <div class="flex items-start justify-between gap-1">
           <div class="min-w-0 flex-1">
-            ${!isSnack ? `<div class="text-[9px] text-white/30 uppercase tracking-wider mb-0.5">${MEAL_LABELS[slot]}</div>` : ''}
+            <div class="text-[9px] text-white/30 uppercase tracking-wider mb-0.5">
+              <span class="meal-time">${formatTime12h(time)}</span>${MEAL_LABELS[slot]}
+            </div>
             <div class="text-xs font-medium truncate">${r.name}</div>
             <div class="flex items-center gap-1 mt-0.5 flex-wrap">
               <span class="badge ${badgeClass}">${r.creditType}</span>
@@ -255,26 +294,117 @@ const Planner = {
             </div>
           </div>
           ${mismatchIcon}
-          <button onclick="event.stopPropagation(); Planner.clearSlot('${td.date}', '${slot}')"
+          <button draggable="false" onclick="event.stopPropagation(); Planner.clearSlot('${td.date}', '${slot}')"
             class="p-0.5 opacity-0 group-hover:opacity-100 hover:bg-white/10 rounded transition-opacity flex-shrink-0">
             <i data-lucide="x" class="w-3 h-3 text-white/40"></i>
+          </button>
+          <button draggable="false" onclick="event.stopPropagation(); Planner.openTimeEditor('${td.date}', '${slot}')"
+            class="p-0.5 opacity-0 group-hover:opacity-100 hover:bg-white/10 rounded transition-opacity flex-shrink-0"
+            title="Edit time">
+            <i data-lucide="clock" class="w-3 h-3 text-white/40"></i>
           </button>
         </div>
       </div>
     `;
   },
 
-  // B2: Snack slot with AM/PM toggle in split days
-  _renderSnackSlot(td, day, slot) {
-    const period = day.selections[slot]?._splitPeriod || (slot <= 'snack2' ? 'am' : 'pm');
-    return this._renderSlot(td, day, slot);
+  _renderTimelineEvent(date, ev) {
+    const kind = EVENT_KIND_MAP[ev.kind] || EVENT_KIND_MAP.other;
+    const durationLabel = ev.durationMinutes
+      ? ` <span class="text-[10px] text-white/30">(${ev.durationMinutes}m)</span>`
+      : '';
+    return `
+      <div class="timeline-event group" draggable="false"
+           data-date="${date}" data-event-id="${ev.id}"
+           onclick="Planner.openEventEditor('${date}', '${ev.id}')">
+        <span class="meal-time">${formatTime12h(ev.time)}</span>
+        <i data-lucide="${kind.icon}" class="w-3 h-3 text-amber-400 flex-shrink-0"></i>
+        <span class="event-name">${this._escapeHtml(ev.name)}${durationLabel}</span>
+        ${ev.location ? `<span class="event-location">${this._escapeHtml(ev.location)}</span>` : ''}
+        <button onclick="event.stopPropagation(); Planner.deleteEvent('${date}', '${ev.id}')"
+          class="p-0.5 opacity-0 group-hover:opacity-100 hover:bg-white/10 rounded transition-opacity flex-shrink-0">
+          <i data-lucide="x" class="w-3 h-3 text-white/40"></i>
+        </button>
+      </div>
+    `;
   },
 
-  toggleSnackPeriod(date, slot) {
-    const sel = this._planState.days[date].selections[slot];
+  _escapeHtml(s) {
+    if (s == null) return '';
+    return String(s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  },
+
+  // Two-screen "Add Meal" flow: first pick a slot, then transition to the restaurant picker
+  openMealSlotPicker(date) {
+    this._closeAllMenus();
+    const day = this._planState.days[date];
+    if (!day) return;
+    const td = TRIP_DAYS.find(d => d.date === date);
+    const emptyMeals = MEAL_SLOTS.filter(s => !day.selections[s]);
+    if (emptyMeals.length === 0) {
+      App.toast('All meal slots are filled for this day', 'info');
+      return;
+    }
+
+    const dateLabel = new Date(date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+    document.getElementById('meal-slot-modal-subtitle').textContent = `${dateLabel} — ${day.park}`;
+
+    const grid = document.getElementById('meal-slot-options');
+    grid.innerHTML = emptyMeals.map(slot => `
+      <button onclick="Planner._pickMealSlot('${date}', '${slot}')"
+        class="flex flex-col items-start gap-1 p-3 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 hover:border-white/30 transition-colors text-left">
+        <div class="flex items-center gap-2 w-full">
+          <i data-lucide="${MEAL_ICONS[slot]}" class="w-4 h-4 text-amber-400"></i>
+          <span class="text-sm font-medium">${MEAL_LABELS[slot]}</span>
+        </div>
+        <span class="text-[10px] text-white/40">${formatTime12h(DEFAULT_MEAL_TIMES[slot])}</span>
+      </button>
+    `).join('');
+
+    document.getElementById('meal-slot-modal').classList.add('active');
+    lucide.createIcons();
+  },
+
+  closeMealSlotPicker() {
+    document.getElementById('meal-slot-modal').classList.remove('active');
+  },
+
+  _pickMealSlot(date, slot) {
+    this.closeMealSlotPicker();
+    this.onSlotClick(date, slot);
+  },
+
+  // Lightweight inline time editor — uses a prompt-style approach via the input modal
+  openTimeEditor(date, slot) {
+    const sel = this._planState.days[date]?.selections[slot];
     if (!sel) return;
-    sel._splitPeriod = (sel._splitPeriod || (slot <= 'snack2' ? 'am' : 'pm')) === 'am' ? 'pm' : 'am';
-    this._onChanged();
+    const current = sel.time || DEFAULT_MEAL_TIMES[slot];
+    App.inputModal(
+      `${MEAL_LABELS[slot]} time`,
+      `Set the time (HH:MM, 24-hour) for ${MEAL_LABELS[slot]}.`,
+      current,
+      (value) => {
+        if (!value) return;
+        if (!/^\d{1,2}:\d{2}$/.test(value)) {
+          App.toast('Invalid time format. Use HH:MM (e.g. 18:30)', 'warning');
+          return;
+        }
+        const [h, m] = value.split(':').map(n => parseInt(n, 10));
+        if (h < 0 || h > 23 || m < 0 || m > 59) {
+          App.toast('Time out of range', 'warning');
+          return;
+        }
+        const padded = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+        History.push(JSON.parse(JSON.stringify(this._planState)));
+        sel.time = padded;
+        this._onChanged();
+      }
+    );
   },
 
   _creditBadgeClass(creditType) {
@@ -445,13 +575,15 @@ const Planner = {
   _commitSelection(date, slot, restaurantId, paymentMethod, pool) {
     History.push(JSON.parse(JSON.stringify(this._planState)));
 
+    const existing = this._planState.days[date].selections[slot];
     this._planState.days[date].selections[slot] = {
       restaurantId,
       paymentMethod,
       pool: paymentMethod === 'ddp' ? pool : null,
       notes: '',
       adrNumber: '',
-      diners: CreditEngine.defaultDiners()
+      diners: CreditEngine.defaultDiners(),
+      time: existing?.time || DEFAULT_MEAL_TIMES[slot]
     };
 
     this._onChanged();
@@ -531,6 +663,101 @@ const Planner = {
   _dinersKidsOnly() { if (this._dinersEditing) { this._dinersEditing.diners = FAMILY.filter(m => !CreditEngine.isAdult(m)).map(m => m.id); this._renderDinersList(); } },
   _dinersClear() { if (this._dinersEditing) { this._dinersEditing.diners = []; this._renderDinersList(); } },
 
+  // Event editor
+  _eventEditing: null,
+
+  openEventEditor(date, eventId = null) {
+    this._closeAllMenus();
+    const day = this._planState.days[date];
+    if (!day) return;
+    if (!Array.isArray(day.events)) day.events = [];
+    const ev = eventId ? day.events.find(e => e.id === eventId) : null;
+    this._eventEditing = { date, eventId: eventId || null };
+
+    const td = TRIP_DAYS.find(d => d.date === date);
+    document.getElementById('event-modal-title').textContent = ev ? 'Edit Event' : 'Add Event';
+    document.getElementById('event-modal-subtitle').textContent = td ? `${td.dow} ${td.date}` : date;
+
+    const kindSel = document.getElementById('event-kind');
+    kindSel.innerHTML = EVENT_KINDS.map(k =>
+      `<option value="${k.id}" ${ev && ev.kind === k.id ? 'selected' : ''}>${k.label}</option>`
+    ).join('');
+    if (ev && ev.kind) kindSel.value = ev.kind;
+
+    document.getElementById('event-name').value = ev?.name || '';
+    document.getElementById('event-time').value = ev?.time || '12:00';
+    document.getElementById('event-location').value = ev?.location || '';
+    document.getElementById('event-duration').value = ev?.durationMinutes || '';
+    document.getElementById('event-notes').value = ev?.notes || '';
+    document.getElementById('event-modal-delete').style.display = ev ? '' : 'none';
+
+    document.getElementById('event-modal').classList.add('active');
+    setTimeout(() => document.getElementById('event-name').focus(), 100);
+    lucide.createIcons();
+  },
+
+  closeEventEditor() {
+    this._eventEditing = null;
+    document.getElementById('event-modal').classList.remove('active');
+  },
+
+  saveEventEditor() {
+    const state = this._eventEditing;
+    if (!state) return;
+    const name = document.getElementById('event-name').value.trim();
+    const time = document.getElementById('event-time').value.trim();
+    if (!name) { App.toast('Event name is required', 'warning'); return; }
+    if (!/^\d{2}:\d{2}$/.test(time)) { App.toast('Valid time required', 'warning'); return; }
+
+    const durationRaw = document.getElementById('event-duration').value.trim();
+    const durationMinutes = durationRaw ? Math.max(0, parseInt(durationRaw, 10)) : null;
+
+    History.push(JSON.parse(JSON.stringify(this._planState)));
+
+    const day = this._planState.days[state.date];
+    if (!Array.isArray(day.events)) day.events = [];
+
+    const payload = {
+      id: state.eventId || ('evt_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8)),
+      name,
+      time,
+      kind: document.getElementById('event-kind').value || 'other',
+      location: document.getElementById('event-location').value.trim(),
+      durationMinutes: Number.isFinite(durationMinutes) ? durationMinutes : null,
+      notes: document.getElementById('event-notes').value.trim()
+    };
+
+    if (state.eventId) {
+      const idx = day.events.findIndex(e => e.id === state.eventId);
+      if (idx >= 0) day.events[idx] = payload;
+      else day.events.push(payload);
+    } else {
+      day.events.push(payload);
+    }
+
+    this.closeEventEditor();
+    this._onChanged();
+  },
+
+  _eventEditorDelete() {
+    const state = this._eventEditing;
+    if (!state || !state.eventId) return;
+    const date = state.date;
+    const eventId = state.eventId;
+    this.closeEventEditor();
+    this.deleteEvent(date, eventId);
+  },
+
+  deleteEvent(date, eventId) {
+    const day = this._planState.days[date];
+    if (!day || !Array.isArray(day.events)) return;
+    const idx = day.events.findIndex(e => e.id === eventId);
+    if (idx < 0) return;
+    History.push(JSON.parse(JSON.stringify(this._planState)));
+    day.events.splice(idx, 1);
+    this._onChanged();
+  },
+
   saveDinersEdit() {
     const state = this._dinersEditing;
     if (!state) return;
@@ -548,9 +775,10 @@ const Planner = {
 
   clearDay(date) {
     this._closeAllMenus();
-    App.confirm('Clear All Selections', `Remove all meals from ${TRIP_DAYS.find(d => d.date === date)?.dow || date}?`, () => {
+    App.confirm('Clear All Selections', `Remove all meals and events from ${TRIP_DAYS.find(d => d.date === date)?.dow || date}?`, () => {
       History.push(JSON.parse(JSON.stringify(this._planState)));
       MEAL_SLOTS.forEach(slot => { this._planState.days[date].selections[slot] = null; });
+      this._planState.days[date].events = [];
       this._onChanged();
     });
   },
@@ -679,7 +907,9 @@ const Planner = {
         paymentMethod,
         pool: paymentMethod === 'ddp' ? pool : null,
         notes: sel?.notes || '',
-        adrNumber: sel?.adrNumber || ''
+        adrNumber: sel?.adrNumber || '',
+        diners: sel?.diners ? [...sel.diners] : CreditEngine.defaultDiners(),
+        time: sel?.time || DEFAULT_MEAL_TIMES[slot]
       };
       Scenarios.save(this._planState);
       this.render();
@@ -752,18 +982,24 @@ const Planner = {
       const tempPark = fromDay.park;
       const tempSplit = fromDay.splitDay;
       const tempSplitParks = fromDay.splitParks ? JSON.parse(JSON.stringify(fromDay.splitParks)) : null;
+      const tempDividerTime = fromDay.splitDividerTime || DEFAULT_SPLIT_DIVIDER_TIME;
+      const tempEvents = JSON.parse(JSON.stringify(fromDay.events || []));
 
       fromDay.selections = JSON.parse(JSON.stringify(toDay.selections));
       fromDay.notes = toDay.notes;
       fromDay.park = toDay.park;
       fromDay.splitDay = toDay.splitDay;
       fromDay.splitParks = toDay.splitParks ? JSON.parse(JSON.stringify(toDay.splitParks)) : null;
+      fromDay.splitDividerTime = toDay.splitDividerTime || DEFAULT_SPLIT_DIVIDER_TIME;
+      fromDay.events = JSON.parse(JSON.stringify(toDay.events || []));
 
       toDay.selections = tempSel;
       toDay.notes = tempNotes;
       toDay.park = tempPark;
       toDay.splitDay = tempSplit;
       toDay.splitParks = tempSplitParks;
+      toDay.splitDividerTime = tempDividerTime;
+      toDay.events = tempEvents;
 
       // Re-assign pools on DDP selections
       this._reassignPools(fromDate);
@@ -824,6 +1060,12 @@ const Planner = {
     toDay.park = fromDay.park;
     toDay.splitDay = fromDay.splitDay;
     toDay.splitParks = fromDay.splitParks ? JSON.parse(JSON.stringify(fromDay.splitParks)) : null;
+    toDay.splitDividerTime = fromDay.splitDividerTime || DEFAULT_SPLIT_DIVIDER_TIME;
+    // Clone events with regenerated ids to avoid duplicates across days
+    toDay.events = (fromDay.events || []).map(ev => ({
+      ...JSON.parse(JSON.stringify(ev)),
+      id: 'evt_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8)
+    }));
 
     this._reassignPools(toDate);
 
@@ -902,6 +1144,243 @@ const Planner = {
     document.querySelectorAll('.dropdown-menu.active').forEach(m => m.classList.remove('active'));
   },
 
+  // ===== Card drag-and-drop (desktop only via HTML5 DnD) =====
+  _dndPayload: null,
+
+  _canDropMeal(srcSlot, targetSlot) {
+    if (!srcSlot || !targetSlot) return false;
+    const isSnack = s => s && s.startsWith('snack');
+    if (isSnack(srcSlot) && isSnack(targetSlot)) return true;
+    if (!isSnack(srcSlot) && !isSnack(targetSlot)) return srcSlot === targetSlot;
+    return false;
+  },
+
+  _onDragStart(e) {
+    const target = e.target.closest('.meal-slot-filled[draggable="true"]');
+    if (!target) return;
+    const date = target.dataset.date;
+    const slot = target.dataset.slot;
+    const sel = this._planState.days[date]?.selections[slot];
+    if (!sel) return;
+
+    this._dndPayload = { kind: 'meal', date, slot };
+    try {
+      e.dataTransfer.setData('application/x-ddp-card', JSON.stringify(this._dndPayload));
+      e.dataTransfer.setData('text/plain', `${date}/${slot}`);
+    } catch (err) { /* ignore */ }
+    e.dataTransfer.effectAllowed = 'copyMove';
+    target.classList.add('dragging');
+    document.body.classList.add('dragging-meal');
+  },
+
+  _onDragOver(e) {
+    if (!this._dndPayload) return;
+    const targetEl = e.target.closest('.meal-slot-filled, .meal-slot-empty');
+    if (!targetEl) return;
+    const targetDate = targetEl.dataset.date;
+    const targetSlot = targetEl.dataset.slot;
+    if (!targetDate || !targetSlot) return;
+    if (targetDate === this._dndPayload.date && targetSlot === this._dndPayload.slot) return;
+    if (!this._canDropMeal(this._dndPayload.slot, targetSlot)) {
+      targetEl.classList.add('drop-target-invalid');
+      e.dataTransfer.dropEffect = 'none';
+      return;
+    }
+    e.preventDefault();
+    targetEl.classList.add('drop-target-valid');
+    e.dataTransfer.dropEffect = (e.ctrlKey || e.altKey || e.metaKey) ? 'copy' : 'move';
+  },
+
+  _onDragLeave(e) {
+    const targetEl = e.target.closest('.meal-slot-filled, .meal-slot-empty');
+    if (!targetEl) return;
+    targetEl.classList.remove('drop-target-valid', 'drop-target-invalid');
+  },
+
+  _onDrop(e) {
+    const payload = this._dndPayload;
+    if (!payload) return;
+    const targetEl = e.target.closest('.meal-slot-filled, .meal-slot-empty');
+    if (!targetEl) return;
+    const targetDate = targetEl.dataset.date;
+    const targetSlot = targetEl.dataset.slot;
+    if (!targetDate || !targetSlot) return;
+    if (!this._canDropMeal(payload.slot, targetSlot)) return;
+    if (targetDate === payload.date && targetSlot === payload.slot) return;
+    e.preventDefault();
+    targetEl.classList.remove('drop-target-valid', 'drop-target-invalid');
+
+    const isCopy = e.ctrlKey || e.altKey || e.metaKey;
+    this._executeDrop(payload, targetDate, targetSlot, isCopy);
+  },
+
+  _onDragEnd() {
+    document.querySelectorAll('.meal-slot-filled.dragging').forEach(el => el.classList.remove('dragging'));
+    document.querySelectorAll('.drop-target-valid, .drop-target-invalid').forEach(el => {
+      el.classList.remove('drop-target-valid', 'drop-target-invalid');
+    });
+    document.body.classList.remove('dragging-meal');
+    this._dndPayload = null;
+  },
+
+  _executeDrop(payload, targetDate, targetSlot, isCopy) {
+    const srcDay = this._planState.days[payload.date];
+    const srcSel = srcDay?.selections[payload.slot];
+    if (!srcSel) return;
+
+    History.push(JSON.parse(JSON.stringify(this._planState)));
+    const targetDay = this._planState.days[targetDate];
+    const cloned = JSON.parse(JSON.stringify(srcSel));
+    // Reset time to default for the new slot kind so cards re-anchor sensibly
+    cloned.time = DEFAULT_MEAL_TIMES[targetSlot] || cloned.time;
+    targetDay.selections[targetSlot] = cloned;
+
+    // Reassign pool on the target day if DDP
+    this._reassignPools(targetDate);
+
+    if (!isCopy) {
+      srcDay.selections[payload.slot] = null;
+    }
+    this._onChanged();
+    App.toast(isCopy ? 'Meal copied' : 'Meal moved', 'success');
+  },
+
+  // ===== Draggable Park-Hop divider =====
+  _dividerDrag: null,
+
+  _beginDividerDrag(event, date) {
+    if (event.button !== undefined && event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+
+    const dividerEl = event.currentTarget;
+    const column = dividerEl.closest('[data-day-timeline]');
+    if (!column) return;
+
+    History.push(JSON.parse(JSON.stringify(this._planState)));
+
+    this._dividerDrag = {
+      date,
+      dividerEl,
+      column,
+      pointerId: event.pointerId,
+      historyPushed: true
+    };
+
+    if (event.pointerId !== undefined && dividerEl.setPointerCapture) {
+      try { dividerEl.setPointerCapture(event.pointerId); } catch (e) { /* ignore */ }
+    }
+    dividerEl.classList.add('dragging');
+
+    const onMove = (e) => this._onDividerMove(e);
+    const onUp = (e) => {
+      this._onDividerUp(e);
+      document.removeEventListener('pointermove', onMove);
+      document.removeEventListener('pointerup', onUp);
+      document.removeEventListener('pointercancel', onUp);
+    };
+    document.addEventListener('pointermove', onMove);
+    document.addEventListener('pointerup', onUp);
+    document.addEventListener('pointercancel', onUp);
+  },
+
+  _onDividerMove(event) {
+    const drag = this._dividerDrag;
+    if (!drag) return;
+    event.preventDefault();
+    const newTime = this._snapDividerToTimeline(drag.column, event.clientY);
+    if (newTime) {
+      const day = this._planState.days[drag.date];
+      if (day && day.splitDividerTime !== newTime) {
+        day.splitDividerTime = newTime;
+        // Live update label without full re-render — full render on release
+        const labelEl = drag.dividerEl.querySelector('.divider-label');
+        if (labelEl) {
+          // Preserve the icon
+          labelEl.innerHTML = `<i data-lucide="grip-horizontal" class="w-3 h-3"></i> Park Hop · ${formatTime12h(newTime)}`;
+          lucide.createIcons();
+        }
+      }
+    }
+  },
+
+  _onDividerUp(event) {
+    const drag = this._dividerDrag;
+    if (!drag) return;
+    drag.dividerEl.classList.remove('dragging');
+    if (drag.pointerId !== undefined && drag.dividerEl.releasePointerCapture) {
+      try { drag.dividerEl.releasePointerCapture(drag.pointerId); } catch (e) { /* ignore */ }
+    }
+    this._dividerDrag = null;
+    this._onChanged();
+  },
+
+  // Walk timeline items in the column, find the gap closest to cursorY,
+  // return a time that places the divider in that gap.
+  _snapDividerToTimeline(column, cursorY) {
+    const itemEls = Array.from(column.querySelectorAll('.meal-slot-filled, .timeline-event'));
+    const itemData = itemEls.map(el => {
+      const rect = el.getBoundingClientRect();
+      const center = rect.top + rect.height / 2;
+      const date = el.dataset.date;
+      let time = null;
+      if (el.classList.contains('meal-slot-filled')) {
+        const slot = el.dataset.slot;
+        const sel = this._planState.days[date]?.selections[slot];
+        time = (sel && sel.time) || DEFAULT_MEAL_TIMES[slot];
+      } else if (el.classList.contains('timeline-event')) {
+        const evId = el.dataset.eventId;
+        const ev = (this._planState.days[date]?.events || []).find(e => e.id === evId);
+        time = ev?.time;
+      }
+      return { center, time };
+    }).filter(d => d.time);
+
+    if (itemData.length === 0) return DEFAULT_SPLIT_DIVIDER_TIME;
+
+    // Sort by time
+    itemData.sort((a, b) => a.time.localeCompare(b.time));
+
+    // Above all
+    if (cursorY < itemData[0].center) {
+      return this._timeMinusMinutes(itemData[0].time, 30);
+    }
+    // Below all
+    if (cursorY >= itemData[itemData.length - 1].center) {
+      return this._timePlusMinutes(itemData[itemData.length - 1].time, 30);
+    }
+    // Between two adjacent items
+    for (let i = 0; i < itemData.length - 1; i++) {
+      const a = itemData[i];
+      const b = itemData[i + 1];
+      const gap = (a.center + b.center) / 2;
+      if (cursorY < gap) {
+        return this._timeMinusMinutes(b.time, 1);
+      }
+    }
+    return DEFAULT_SPLIT_DIVIDER_TIME;
+  },
+
+  _timeToMinutes(hhmm) {
+    const [h, m] = hhmm.split(':').map(n => parseInt(n, 10));
+    return h * 60 + m;
+  },
+
+  _minutesToTime(total) {
+    let t = ((total % (24 * 60)) + 24 * 60) % (24 * 60);
+    const h = Math.floor(t / 60);
+    const m = t % 60;
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+  },
+
+  _timePlusMinutes(hhmm, mins) {
+    return this._minutesToTime(this._timeToMinutes(hhmm) + mins);
+  },
+
+  _timeMinusMinutes(hhmm, mins) {
+    return this._minutesToTime(this._timeToMinutes(hhmm) - mins);
+  },
+
   _onChanged() {
     Scenarios.save(this._planState);
     this.render();
@@ -915,3 +1394,10 @@ document.addEventListener('click', (e) => {
     Planner._closeAllMenus();
   }
 });
+
+// Card drag-and-drop event delegation (desktop)
+document.addEventListener('dragstart', (e) => Planner._onDragStart(e));
+document.addEventListener('dragover',  (e) => Planner._onDragOver(e));
+document.addEventListener('dragleave', (e) => Planner._onDragLeave(e));
+document.addEventListener('drop',      (e) => Planner._onDrop(e));
+document.addEventListener('dragend',   (e) => Planner._onDragEnd(e));

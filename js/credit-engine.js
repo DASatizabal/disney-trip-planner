@@ -149,11 +149,9 @@ const CreditEngine = {
         const r = this._getRestaurant(sel.restaurantId);
         if (!r) return;
 
-        // Location mismatch
-        const effectivePark = day.splitDay && day.splitParks
-          ? (slot === 'dinner' || slot.startsWith('snack3') || slot.startsWith('snack4')
-            ? day.splitParks.pm : day.splitParks.am)
-          : day.park;
+        // Location mismatch — uses time-based AM/PM split
+        const time = sel.time || DEFAULT_MEAL_TIMES[slot];
+        const effectivePark = parkForTime(day, time);
 
         if (effectivePark && effectivePark !== 'none' && !effectivePark.startsWith('Resort')
             && !effectivePark.startsWith('Travel') && !effectivePark.startsWith('Split')) {

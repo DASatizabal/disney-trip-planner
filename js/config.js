@@ -1,5 +1,5 @@
-const APP_VERSION = '1.6.1';
-const APP_BUILD = 'aeaa97d';
+const APP_VERSION = '1.7.0';
+const APP_BUILD = '134e135';
 
 const FAMILY = [
   { id: 'david', name: 'David', age: 'adult', ddpFree: false, canDrink: true, dietary: null },
@@ -49,5 +49,49 @@ const MEAL_LABELS = {
   breakfast: 'Breakfast', lunch: 'Lunch', dinner: 'Dinner',
   snack1: 'Snack 1', snack2: 'Snack 2', snack3: 'Snack 3', snack4: 'Snack 4'
 };
+
+const DEFAULT_MEAL_TIMES = {
+  breakfast: '08:00',
+  lunch:     '12:30',
+  dinner:    '18:30',
+  snack1:    '10:00',
+  snack2:    '15:00',
+  snack3:    '16:30',
+  snack4:    '21:00'
+};
+
+const DEFAULT_SPLIT_DIVIDER_TIME = '13:00';
+
+const EVENT_KINDS = [
+  { id: 'lightning_lane', label: 'Lightning Lane',       icon: 'zap' },
+  { id: 'character',      label: 'Character experience', icon: 'sparkles' },
+  { id: 'fireworks',      label: 'Fireworks',            icon: 'flame' },
+  { id: 'parade',         label: 'Parade',               icon: 'flag' },
+  { id: 'show',           label: 'Show',                 icon: 'tv' },
+  { id: 'barber',         label: 'Barber shop',          icon: 'scissors' },
+  { id: 'tour',           label: 'Tour',                 icon: 'map' },
+  { id: 'other',          label: 'Other',                icon: 'calendar' }
+];
+
+const EVENT_KIND_MAP = EVENT_KINDS.reduce((acc, k) => { acc[k.id] = k; return acc; }, {});
+
+function formatTime12h(hhmm) {
+  if (!hhmm || typeof hhmm !== 'string') return '';
+  const [hStr, mStr] = hhmm.split(':');
+  let h = parseInt(hStr, 10);
+  const m = parseInt(mStr, 10);
+  if (isNaN(h) || isNaN(m)) return '';
+  const ampm = h >= 12 ? 'p' : 'a';
+  h = h % 12;
+  if (h === 0) h = 12;
+  return m === 0 ? `${h}${ampm}` : `${h}:${String(m).padStart(2, '0')}${ampm}`;
+}
+
+function parkForTime(day, hhmm) {
+  if (!day) return null;
+  if (!day.splitDay || !day.splitParks) return day.park;
+  const divider = day.splitDividerTime || DEFAULT_SPLIT_DIVIDER_TIME;
+  return (hhmm || '00:00') < divider ? day.splitParks.am : day.splitParks.pm;
+}
 
 const STORAGE_PREFIX = 'ddp_planner';

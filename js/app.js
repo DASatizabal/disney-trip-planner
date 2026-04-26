@@ -93,6 +93,11 @@ const App = {
   // Keyboard
   _bindKeyboard() {
     document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        this._handleEscape(e);
+        return;
+      }
+
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
 
       if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
@@ -107,6 +112,56 @@ const App = {
         Planner.goToDay(Planner._activeDayIndex + 1);
       }
     });
+  },
+
+  // Maps modal id → close invoker. isGuarded flags modals where Esc would
+  // discard user-entered data, so a second Esc within 500ms is required.
+  _modalRegistry: {
+    'picker-modal':     { close: () => RestaurantPicker.close() },
+    'payment-modal':    { close: () => RestaurantPicker.closePayment() },
+    'pool-modal':       { close: () => RestaurantPicker.closePool() },
+    'diners-modal':     { close: () => Planner.closeDinersEditor() },
+    'meal-slot-modal':  { close: () => Planner.closeMealSlotPicker() },
+    'event-modal':      {
+      close: () => Planner.closeEventEditor(),
+      isGuarded: () => document.getElementById('event-name').value.trim().length > 0
+    },
+    'resolver-modal':   { close: () => Planner.closeResolver() },
+    'summary-modal':    { close: () => App.closeSummary() },
+    'whatsnew-modal':   { close: () => App.closeWhatsNew() },
+    'day-action-modal': { close: () => Planner.closeDayAction() },
+    'confirm-modal':    {
+      close: () => document.getElementById('confirm-cancel').click(),
+      isGuarded: () => document.getElementById('confirm-ok').className.includes('bg-red-500')
+    },
+    'input-modal':      {
+      close: () => document.getElementById('input-modal-cancel').click(),
+      isGuarded: () => document.getElementById('input-modal-field').value.trim().length > 0
+    }
+  },
+
+  _lastEscapeTs: 0,
+
+  _handleEscape(e) {
+    const active = document.querySelectorAll('.modal-backdrop.active');
+    if (active.length === 0) return;
+    // Last in DOM order is visually on top when z-indexes match.
+    const topmost = active[active.length - 1];
+    const entry = this._modalRegistry[topmost.id];
+    if (!entry) return;
+
+    e.preventDefault();
+    if (e.target.blur) e.target.blur();
+
+    const guarded = entry.isGuarded && entry.isGuarded();
+    const now = Date.now();
+    if (guarded && now - this._lastEscapeTs > 500) {
+      this._lastEscapeTs = now;
+      this.toast('Press Esc again to discard', 'warning');
+      return;
+    }
+    this._lastEscapeTs = 0;
+    entry.close();
   },
 
   // Scenarios — B4: use modals instead of prompt/confirm
@@ -212,6 +267,7 @@ const App = {
       new Response(stream).text().then(json => {
         const plan = JSON.parse(json);
         if (plan.days) {
+          Storage._normalizePlan(plan);
           Planner.loadState(plan);
           Scenarios.save(plan);
           Planner.render();
@@ -340,22 +396,40 @@ const App = {
           ${td.vip ? '<span class="badge badge-vip">VIP</span>' : ''}
         </div>`;
 
+      // Build a time-sorted timeline so events interleave with meals in the summary
+      const timelineItems = [];
       MEAL_SLOTS.forEach(slot => {
         const sel = day.selections[slot];
         if (!sel) return;
         const r = CreditEngine._getRestaurant(sel.restaurantId);
         if (!r) return;
-
         const adrNum = sel.adrNumber || '';
         const method = sel.paymentMethod === 'ddp' ? `DDP ${sel.pool}` : sel.paymentMethod.toUpperCase();
-
-        html += `<div class="flex items-center gap-2 text-xs py-0.5 ml-2">
-          <span class="text-white/30 w-14">${MEAL_LABELS[slot]}</span>
-          <span class="font-medium flex-1">${r.name}</span>
-          <span class="badge ${Planner._creditBadgeClass(r.creditType)} text-[8px]">${method}</span>
-          ${adrNum ? `<span class="text-[9px] text-green-400/60">#${adrNum}</span>` : ''}
-        </div>`;
+        timelineItems.push({
+          time: sel.time || DEFAULT_MEAL_TIMES[slot],
+          html: `<div class="flex items-center gap-2 text-xs py-0.5 ml-2">
+            <span class="text-white/30 w-12 text-right font-mono">${formatTime12h(sel.time || DEFAULT_MEAL_TIMES[slot])}</span>
+            <span class="text-white/30 w-14">${MEAL_LABELS[slot]}</span>
+            <span class="font-medium flex-1">${r.name}</span>
+            <span class="badge ${Planner._creditBadgeClass(r.creditType)} text-[8px]">${method}</span>
+            ${adrNum ? `<span class="text-[9px] text-green-400/60">#${adrNum}</span>` : ''}
+          </div>`
+        });
       });
+      (day.events || []).forEach(ev => {
+        const kind = EVENT_KIND_MAP[ev.kind] || EVENT_KIND_MAP.other;
+        timelineItems.push({
+          time: ev.time,
+          html: `<div class="flex items-center gap-2 text-xs py-0.5 ml-2">
+            <span class="text-white/30 w-12 text-right font-mono">${formatTime12h(ev.time)}</span>
+            <span class="text-amber-400/70 w-14"><i data-lucide="${kind.icon}" class="w-3 h-3 inline"></i> ${kind.label}</span>
+            <span class="font-medium flex-1">${Planner._escapeHtml(ev.name)}</span>
+            ${ev.location ? `<span class="text-[10px] text-white/40">${Planner._escapeHtml(ev.location)}</span>` : ''}
+          </div>`
+        });
+      });
+      timelineItems.sort((a, b) => (a.time || '').localeCompare(b.time || ''));
+      timelineItems.forEach(item => { html += item.html; });
 
       if (day.notes) {
         html += `<div class="text-[10px] text-white/30 mt-1 ml-2">${day.notes}</div>`;
@@ -385,6 +459,14 @@ const App = {
 
   // E5: What's New
   _releaseNotes: [
+    { version: '1.7.0', date: '2026-04-26', notes: [
+      'Each day is now a single time-sorted timeline. Meals and non-dining events (Lightning Lane, character experiences, fireworks, parades, barber shop, shows) interleave by time',
+      'Add scheduled events with the new "+ Add event" button per day. Events have a time, kind, optional location, duration, and notes',
+      'Park Hop divider on split days is now draggable — drop it between any two items to choose which meals/events count toward the AM vs PM park',
+      'Drag-and-drop restaurant cards across days. Default is move; hold Ctrl/Alt to copy. Breakfast↔breakfast, lunch↔lunch, dinner↔dinner; any snack ↔ any snack',
+      'Edit a meal\'s time by hovering the card and clicking the clock icon',
+      'Import/export icons swapped to match cloud-app convention (upload = export, download = import)'
+    ]},
     { version: '1.6.1', date: '2026-04-22', notes: [
       'Snacks no longer multiply by diner count — one snack = one SN credit (and one item of cost), not four'
     ]},

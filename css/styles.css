@@ -378,6 +378,204 @@ body.light-mode .restaurant-card:hover {
 body.light-mode .split-divider { border-color: rgba(0, 0, 0, 0.12); }
 body.light-mode .split-divider span { color: rgba(0, 0, 0, 0.4); }
 
+/* Draggable Park Hop divider */
+.split-divider-draggable {
+  position: relative;
+  margin: 0.5rem 0;
+  padding: 0.25rem 0.5rem;
+  border-top: 2px dashed rgba(168, 85, 247, 0.45);
+  background: linear-gradient(to bottom, rgba(168, 85, 247, 0.04), transparent 80%);
+  text-align: center;
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+  border-radius: 0;
+}
+
+.split-divider-draggable:hover {
+  border-top-color: rgba(168, 85, 247, 0.75);
+  background: linear-gradient(to bottom, rgba(168, 85, 247, 0.10), transparent 80%);
+}
+
+.split-divider-draggable.dragging {
+  cursor: grabbing;
+  border-top-color: rgba(168, 85, 247, 1);
+  background: rgba(168, 85, 247, 0.18);
+}
+
+.split-divider-draggable .divider-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  position: relative;
+  top: -0.7em;
+  padding: 0.125rem 0.5rem;
+  background: #1e293b;
+  border: 1px solid rgba(168, 85, 247, 0.35);
+  border-radius: 9999px;
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(216, 180, 254, 0.95);
+  font-weight: 600;
+}
+
+body.light-mode .split-divider-draggable .divider-label {
+  background: #ffffff;
+  color: #7c3aed;
+}
+
+/* Timeline meal-time chip (leading time on each card) */
+.meal-time {
+  display: inline-block;
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.5);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  margin-right: 0.25rem;
+}
+
+body.light-mode .meal-time { color: rgba(30, 41, 59, 0.6); }
+
+/* Timeline event card */
+.timeline-event {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.375rem 0.625rem;
+  border: 1px solid rgba(245, 158, 11, 0.25);
+  border-radius: 0.625rem;
+  background: rgba(245, 158, 11, 0.06);
+  cursor: pointer;
+  position: relative;
+  transition: all 0.15s ease;
+  min-height: 32px;
+}
+
+.timeline-event:hover {
+  background: rgba(245, 158, 11, 0.10);
+  border-color: rgba(245, 158, 11, 0.40);
+  transform: translateY(-1px);
+}
+
+.timeline-event .event-name {
+  font-size: 0.75rem;
+  font-weight: 500;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.timeline-event .event-location {
+  font-size: 0.625rem;
+  color: rgba(255, 255, 255, 0.4);
+  flex-shrink: 0;
+}
+
+body.light-mode .timeline-event {
+  background: rgba(245, 158, 11, 0.08);
+  border-color: rgba(245, 158, 11, 0.30);
+}
+
+body.light-mode .timeline-event .event-location { color: rgba(30, 41, 59, 0.5); }
+
+/* Add affordances row */
+.timeline-add-row {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px dashed rgba(255, 255, 255, 0.06);
+}
+
+.timeline-add-btn {
+  flex: 1;
+  padding: 0.375rem 0.5rem;
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: rgba(255, 255, 255, 0.35);
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px dashed rgba(255, 255, 255, 0.1);
+  border-radius: 0.5rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  transition: all 0.15s ease;
+}
+
+.timeline-add-btn:hover {
+  color: rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+body.light-mode .timeline-add-btn {
+  color: rgba(30, 41, 59, 0.45);
+  border-color: rgba(0, 0, 0, 0.1);
+}
+
+body.light-mode .timeline-add-btn:hover {
+  color: rgba(30, 41, 59, 0.85);
+  background: rgba(0, 0, 0, 0.04);
+}
+
+/* Drag-and-drop states */
+.meal-slot-filled[draggable="true"],
+.timeline-event[draggable="true"] {
+  cursor: grab;
+}
+
+.meal-slot-filled.dragging,
+.timeline-event.dragging {
+  opacity: 0.4;
+  cursor: grabbing;
+}
+
+.drop-target-valid {
+  border-color: rgba(34, 197, 94, 0.6) !important;
+  background: rgba(34, 197, 94, 0.08) !important;
+  box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.25);
+}
+
+.drop-target-invalid {
+  border-color: rgba(239, 68, 68, 0.45) !important;
+  background: rgba(239, 68, 68, 0.06) !important;
+  cursor: not-allowed;
+}
+
+/* Hidden empty slots become visible during a drag */
+.timeline-empty-slots {
+  display: none;
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px dashed rgba(255, 255, 255, 0.08);
+}
+
+body.dragging-meal .timeline-empty-slots {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+body.dragging-meal .timeline-empty-slots-label {
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: rgba(255, 255, 255, 0.35);
+  margin-bottom: 0.25rem;
+}
+
+body.dragging-meal .timeline-empty-slots .meal-slot-empty {
+  padding: 0.375rem 0.5rem;
+  min-height: 32px;
+}
+
 /* Toast notification */
 .toast-container {
   position: fixed;
