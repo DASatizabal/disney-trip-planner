@@ -40,6 +40,7 @@
         <i data-lucide="arrow-left" class="w-4 h-4"></i>
         <span class="text-xs hidden sm:inline">Planner</span>
       </a>
+      <a href="availability.html" class="text-xs text-white/50 hover:text-amber-400 hidden sm:inline">Availability</a>
       <div class="w-px h-5 bg-white/10"></div>
       <div class="flex items-center gap-2 mr-auto">
         <i data-lucide="book-open" class="w-5 h-5 text-amber-400"></i>
@@ -90,6 +91,16 @@
         <input type="checkbox" id="filter-ddp-only" class="rounded">
         <span>DDP Only</span>
       </label>
+      <label class="flex items-center gap-1.5 text-xs cursor-pointer">
+        <input type="checkbox" id="filter-vip" class="rounded">
+        <span>VIP</span>
+      </label>
+      <label class="flex items-center gap-1.5 text-xs cursor-pointer">
+        <input type="checkbox" id="filter-saved" class="rounded">
+        <span>Saved only</span>
+      </label>
+      <span id="saved-count" class="text-[10px] text-white/40 font-mono"></span>
+      <button id="clear-saved" class="hidden text-[10px] text-white/40 hover:text-amber-400 underline">Clear all</button>
     </div>
   </section>
 
@@ -100,6 +111,7 @@
         <table class="w-full text-xs">
           <thead>
             <tr class="border-b border-white/10 text-left text-white/50">
+              <th class="px-2 py-2 w-8 text-center" title="Saved restaurants">★</th>
               <th class="px-3 py-2 sort-btn" onclick="sortBy('name')">Name <span class="arrow">▲</span></th>
               <th class="px-3 py-2 sort-btn hidden sm:table-cell" onclick="sortBy('type')">Type <span class="arrow">▲</span></th>
               <th class="px-3 py-2 sort-btn" onclick="sortBy('location')">Location <span class="arrow">▲</span></th>
@@ -136,6 +148,18 @@
     // State
     let sortCol = 'name', sortAsc = true;
 
+    // Shortlist (persisted)
+    const SHORTLIST_KEY = 'ddp_planner_shortlist';
+    function rid(r) { return r.id != null ? 'db:' + r.id : 'csv:' + r.name; }
+    let shortlist = new Set();
+    try { shortlist = new Set(JSON.parse(localStorage.getItem(SHORTLIST_KEY) || '[]')); } catch(e) {}
+    function saveShortlist() { localStorage.setItem(SHORTLIST_KEY, JSON.stringify([...shortlist])); }
+    function updateSavedUI() {
+      const n = shortlist.size;
+      document.getElementById('saved-count').textContent = n ? `${n} saved` : '';
+      document.getElementById('clear-saved').classList.toggle('hidden', n === 0);
+    }
+
     function sortBy(col) {
       if (sortCol === col) sortAsc = !sortAsc;
       else { sortCol = col; sortAsc = true; }
@@ -150,6 +174,8 @@
       const price = document.getElementById('filter-price').value;
       const resOnly = document.getElementById('filter-reservation').checked;
       const ddpOnly = document.getElementById('filter-ddp-only').checked;
+      const vipOnly = document.getElementById('filter-vip').checked;
+      const savedOnly = document.getElementById('filter-saved').checked;
 
       let filtered = allRestaurants.filter(r => {
         if (search && !(r.name.toLowerCase().includes(search) || (r.cuisine||'').toLowerCase().includes(search) || (r.location||'').toLowerCase().includes(search) || (r.notes||'').toLowerCase().includes(search) || (r.characterNames||'').toLowerCase().includes(search))) return false;
@@ -162,6 +188,8 @@
         if (price !== 'all' && r.priceTier !== price) return false;
         if (resOnly && !r.reservation) return false;
         if (ddpOnly && !r.acceptsDDP) return false;
+        if (vipOnly && !(r.vipDiscountPct > 0)) return false;
+        if (savedOnly && !shortlist.has(rid(r))) return false;
         return true;
       });
 
@@ -205,7 +233,9 @@
         const priceShort = r.priceTier || '';
         const notesText = r.notes || '';
 
+        const id = rid(r);
         return `<tr class="border-b border-white/5 hover:bg-white/5 ${rowClass} ${highlight}">
+          <td class="px-2 py-2 text-center"><input type="checkbox" class="shortlist-cb cursor-pointer" data-rid="${id.replace(/"/g,'&quot;')}" ${shortlist.has(id) ? 'checked' : ''}></td>
           <td class="px-3 py-2 font-medium">${r.name}</td>
           <td class="px-3 py-2 text-white/40 hidden sm:table-cell">${r.type}</td>
           <td class="px-3 py-2 text-white/50">${shortLocation(r.location)}</td>
@@ -250,10 +280,30 @@
     // Bind filters
     document.getElementById('search').addEventListener('input', () => { clearTimeout(window._st); window._st = setTimeout(renderTable, 150); });
     ['filter-location','filter-type','filter-ddp','filter-price'].forEach(id => document.getElementById(id).addEventListener('change', renderTable));
-    ['filter-reservation','filter-ddp-only'].forEach(id => document.getElementById(id).addEventListener('change', renderTable));
+    ['filter-reservation','filter-ddp-only','filter-vip','filter-saved'].forEach(id => document.getElementById(id).addEventListener('change', renderTable));
+
+    // Shortlist toggle (event delegation on tbody)
+    document.getElementById('table-body').addEventListener('change', e => {
+      if (!e.target.matches('.shortlist-cb')) return;
+      const id = e.target.getAttribute('data-rid');
+      if (e.target.checked) shortlist.add(id); else shortlist.delete(id);
+      saveShortlist();
+      updateSavedUI();
+      if (document.getElementById('filter-saved').checked) renderTable();
+    });
+
+    // Clear all saved
+    document.getElementById('clear-saved').addEventListener('click', () => {
+      if (!confirm(`Clear all ${shortlist.size} saved restaurants?`)) return;
+      shortlist.clear();
+      saveShortlist();
+      updateSavedUI();
+      renderTable();
+    });
 
     // Init
     renderTable();
+    updateSavedUI();
     lucide.createIcons();
   </script>
 </body>
