@@ -1,20 +1,26 @@
-# Disney DDP Planner — JSON Import Schema Guide
+# Disney DDP Planner — JSON Import Schemas Guide
 
-Paste this whole document into a Claude Chat conversation, then ask Claude to generate a JSON file you can import via the planner's Import button.
+Paste this whole document into a Claude Chat conversation, then ask Claude to generate a JSON file you can import. The planner accepts **two** distinct JSON files at two different pages:
+
+1. **Trip Plan import** (`index.html`) — full plan: which restaurant is booked for each meal, scheduled events, split days, etc.
+2. **Reservation Availability import** (`availability.html`) — for each shortlisted restaurant, what times are available on each trip date (the data you'd collect from My Disney Experience).
+
+This document defines both contracts. If Claude follows them, the planner will accept the files.
+
+## Where these get imported
+
+In every page header the convention is:
+- **Upload icon** = Export (saves the page's data to a JSON file)
+- **Download icon** = Import (loads a JSON file into that page)
+
+| File type | Page | How to import |
+|---|---|---|
+| Trip plan | `index.html` (the main planner) | Click the download-arrow icon next to "Reset". Replaces the current scenario |
+| Reservation availability | `availability.html` | Click the download-arrow icon in the top bar. **Merges** with existing data (only cells in the file are touched) |
 
 ---
 
-## Purpose
-
-The Disney DDP Planner can import a JSON file that fully specifies a trip plan: which restaurant is booked for each meal, what events (Lightning Lane, fireworks, character experiences, etc.) are scheduled, and how each split day is configured. This document is the contract — if Claude follows it, the planner will accept the file.
-
-## Where this gets imported
-
-The header has two icons next to "Reset":
-- **Upload icon** = Export (saves the current plan to a JSON file)
-- **Download icon** = Import (loads a JSON file into the current scenario, replacing what's there)
-
-So the workflow is: ask Claude to produce JSON, save it as a `.json` file, click the import button (download icon) in the planner, pick the file.
+# Part 1 — Trip Plan import schema
 
 ---
 
@@ -348,5 +354,111 @@ For an empty day, this minimal shape is valid:
 - [ ] Every event has unique `id`, valid `time`, valid `kind`
 - [ ] All times are `"HH:MM"` 24-hour with leading zero
 - [ ] Meal slot kinds match restaurant categories (don't put a snack restaurant in `dinner`)
+
+If any of these can't be satisfied with confidence, say so in the response and leave that piece blank instead of guessing.
+
+---
+
+# Part 2 — Reservation Availability import schema
+
+## Purpose
+
+The **Availability** page (`availability.html`) lets the user track, per-restaurant and per-trip-date, what reservation times they saw available on My Disney Experience. The view is a matrix: rows = restaurants the user has shortlisted, columns = the 8 trip dates, cells = a free-form list of times (e.g. `"8:00, 8:30, 9:15"`). The user can populate cells by hand, or import a JSON file that Claude generated from a description like *"Be Our Guest had 8:00, 8:30, and 9:15 available on Tuesday."*
+
+Trip dates and family ids are the same as in Part 1 — re-read the **Trip constants** section above before generating output.
+
+## Top-level JSON shape
+
+```json
+{
+  "db:1": {
+    "2026-06-07": "9:00, 9:30, 10:00",
+    "2026-06-08": "8:30, 9:15"
+  },
+  "db:21": {
+    "2026-06-09": "12:00, 12:30, 1:15"
+  },
+  "csv:Some Quick Service Spot": {
+    "2026-06-10": "11:30, 12:00"
+  }
+}
+```
+
+The top-level object is keyed by **restaurant id (rid)**. Each value is an object keyed by **trip date** (`YYYY-MM-DD`). Each cell value is a **string** — the importer stores it verbatim and displays it in the matrix as-is.
+
+## Restaurant id (`rid`) format
+
+Each restaurant in the planner has a stable rid string the importer matches against:
+
+| Source | rid format | Example |
+|---|---|---|
+| DB restaurant (has a numeric `id`) | `"db:<id>"` | `"db:1"` for The Crystal Palace |
+| CSV-only restaurant (no DB id) | `"csv:<exact name>"` | `"csv:Refreshment Outpost"` — name must match the CSV `name` field exactly, including punctuation/casing |
+
+To resolve names → rids, ask the user to share the `restaurants.json` export (run `RestaurantMerge.getMerged()` data, or the dump of `RESTAURANTS` from `js/restaurant-db.js`). Look up each restaurant by name and use its numeric `id` to build `"db:<id>"`.
+
+If a restaurant is not in `restaurants.json` at all, fall back to `"csv:<exact name>"` and copy the name verbatim from whatever the user pasted in.
+
+## Date keys
+
+Use exactly these keys (same 8 trip dates as Part 1):
+
+```
+2026-06-05, 2026-06-06, 2026-06-07, 2026-06-08,
+2026-06-09, 2026-06-10, 2026-06-11, 2026-06-12
+```
+
+Any other date key will be stored but never displayed (the matrix only shows the 8 trip dates), so don't include them.
+
+## Time string format
+
+Cell values are **strings**, not arrays. Format is whatever reads naturally to a human glancing at the matrix. Examples that all work:
+
+- `"8:00, 8:30, 9:15"`
+- `"8:00a, 8:30a, 9:15a"`
+- `"8:00 - 8:30"` (range)
+- `"sold out"` or `"none"` (notes are fine — anything stored as a string is shown verbatim)
+
+Recommended convention: comma-separated 12-hour times in user-friendly form (e.g. `"8:00, 8:30, 9:15a"` or `"6:30p, 7:00p, 7:30p"`). Be consistent within a single import.
+
+## Merge semantics
+
+Imports **merge** with the existing availability data:
+
+- Every `(rid, date)` cell in the imported file **overwrites** the same cell in storage.
+- Cells **not** in the imported file are **untouched** — partial imports are safe.
+- A cell with an empty/whitespace string is treated as deletion-equivalent (the cell becomes empty).
+- Restaurants not in the user's shortlist are still saved but won't appear in the UI until the user shortlists them on `restaurants.html`.
+
+This means: it's safe (and encouraged) to send a small JSON with just the restaurants/dates you have new info on. You don't need to round-trip the full matrix.
+
+## Worked example
+
+The user describes: *"For Tuesday June 9 I checked Be Our Guest (DB id 5), Pecos Bill (DB id 21), and the Mickey Pretzel Cart (CSV-only, name 'Pretzel Cart'). Be Our Guest had 8:00, 8:30, 9:00 for breakfast. Pecos Bill walks up — no times. Pretzel Cart no reservation needed."*
+
+A reasonable response:
+
+```json
+{
+  "db:5": {
+    "2026-06-09": "8:00, 8:30, 9:00"
+  },
+  "db:21": {
+    "2026-06-09": "walk-up only"
+  },
+  "csv:Pretzel Cart": {
+    "2026-06-09": "no reservation"
+  }
+}
+```
+
+## Validation checklist (Claude should self-check before producing output)
+
+- [ ] Top-level value is an object (not an array, not a wrapped `plan`/`days` shape — that's the Part 1 schema)
+- [ ] Every key starts with `"db:"` (followed by a positive integer) or `"csv:"` (followed by a non-empty name)
+- [ ] Every nested key is a valid trip date in `YYYY-MM-DD` form, drawn from the 8 allowed dates
+- [ ] Every cell value is a **string** (not an array, not a number, not null)
+- [ ] No comments inside the JSON (JSON doesn't support them — use a separate prose explanation alongside the file)
+- [ ] If user-provided names are ambiguous and you can't pin them to a `db:<id>`, ask before using a `csv:<name>` fallback — the wrong name silently misses
 
 If any of these can't be satisfied with confidence, say so in the response and leave that piece blank instead of guessing.
