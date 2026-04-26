@@ -418,10 +418,12 @@ Cell values are **strings**, not arrays. Tokens are **comma-separated**; each to
 
 | Token | Effect |
 |---|---|
-| `8:00`, `8:30`, `12:30` | Plain time (12-hour or 24-hour) |
+| `8:00`, `8:30`, `12:30` | Plain time. See ambiguity rule below |
 | `8:00a`, `8:30am`, `6:30p`, `6:30pm` | With am/pm marker — eliminates ambiguity |
 | `18:30` | 24-hour form is fine — interpreted directly |
 | `sold out`, `walk-up only`, `none` | Free-text — rendered as a chip, classified as "unknown" meal |
+
+**Ambiguity rule** for plain times with no am/pm marker: hours 1–6 are treated as **PM** (Disney has no 1–6am dining), hours 7–11 are treated as **AM** (typical breakfast), 12 and 13–23 are as written. So `"1:00"` = 1pm, `"6:30"` = 6:30pm, `"8:00"` = 8am, `"18:30"` = 6:30pm. When in doubt, include the marker.
 
 Examples that all work as cell values:
 

@@ -280,6 +280,8 @@
     }
 
     // Time parsing — accepts "8:00", "8:00a", "8:30 PM", "18:30", "8", etc.
+    // Without am/pm marker: hours 1-6 are treated as PM (no Disney dining 1-6am).
+    // Hours 7-11 are treated as AM (typical breakfast). 12+ is 24-hour as written.
     function parseTimeMinutes(s) {
       if (!s) return null;
       const t = String(s).trim().toLowerCase().replace(/\s+/g, '');
@@ -291,6 +293,7 @@
       if (h > 23 || mn > 59) return null;
       if (ampm === 'a') { if (h === 12) h = 0; }
       else if (ampm === 'p') { if (h !== 12) h += 12; }
+      else if (h >= 1 && h <= 6) { h += 12; }
       return h * 60 + mn;
     }
     function classifyMeal(s) {
