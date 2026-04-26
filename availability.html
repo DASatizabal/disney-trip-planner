@@ -147,6 +147,24 @@
     .view-btn.active { background: rgba(251,191,36,0.18); color: #fcd34d; }
     body.light-mode .view-btn.active { color: #b45309; background: rgba(251,191,36,0.25); }
 
+    .hide-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 16px; height: 16px;
+      border-radius: 4px;
+      color: rgba(255,255,255,0.25);
+      cursor: pointer;
+      font-size: 13px;
+      line-height: 1;
+      user-select: none;
+      flex-shrink: 0;
+      transition: all 0.1s;
+    }
+    .hide-btn:hover { color: #f87171; background: rgba(255,255,255,0.06); }
+    body.light-mode .hide-btn { color: rgba(0,0,0,0.3); }
+    body.light-mode .hide-btn:hover { color: #dc2626; background: rgba(0,0,0,0.05); }
+
     .day-summary {
       margin-top: 4px;
       padding-top: 4px;
@@ -229,6 +247,12 @@
       <p class="text-xs">Go to <a href="restaurants.html" class="text-amber-400 hover:underline">All Restaurants</a> and check the ★ box on the ones you want to track.</p>
     </div>
 
+    <div id="hidden-bar" class="hidden glass-card px-3 py-2 mb-3 text-xs text-white/60 flex items-center gap-3 flex-wrap">
+      <i data-lucide="eye-off" class="w-3.5 h-3.5 text-white/40"></i>
+      <span id="hidden-count"></span>
+      <button id="show-all-hidden" class="text-amber-400 hover:underline ml-auto">Show all</button>
+    </div>
+
     <div id="entry-view"></div>
     <div id="matrix-view" class="hidden"></div>
 
@@ -244,6 +268,30 @@
     const SHORTLIST_KEY = 'ddp_planner_shortlist';
     const AVAIL_KEY = 'ddp_planner_availability';
     const VIEW_KEY = 'ddp_planner_avail_view';
+    const HIDDEN_RIDS_KEY = 'ddp_planner_avail_hidden_rids';
+    const HIDDEN_DATES_KEY = 'ddp_planner_avail_hidden_dates';
+
+    let hiddenRids = new Set();
+    let hiddenDates = new Set();
+    try { hiddenRids = new Set(JSON.parse(localStorage.getItem(HIDDEN_RIDS_KEY) || '[]')); } catch(e) {}
+    try { hiddenDates = new Set(JSON.parse(localStorage.getItem(HIDDEN_DATES_KEY) || '[]')); } catch(e) {}
+    function saveHidden() {
+      localStorage.setItem(HIDDEN_RIDS_KEY, JSON.stringify([...hiddenRids]));
+      localStorage.setItem(HIDDEN_DATES_KEY, JSON.stringify([...hiddenDates]));
+    }
+    function visibleDays() { return TRIP_DAYS.filter(td => !hiddenDates.has(td.date)); }
+    function visibleShortlist() { return shortlist.filter(r => !hiddenRids.has(rid(r))); }
+    function updateHiddenBar() {
+      const bar = document.getElementById('hidden-bar');
+      if (!bar) return;
+      const total = hiddenRids.size + hiddenDates.size;
+      if (total === 0) { bar.classList.add('hidden'); return; }
+      bar.classList.remove('hidden');
+      const parts = [];
+      if (hiddenRids.size)  parts.push(`${hiddenRids.size} restaurant${hiddenRids.size > 1 ? 's' : ''}`);
+      if (hiddenDates.size) parts.push(`${hiddenDates.size} date${hiddenDates.size > 1 ? 's' : ''}`);
+      document.getElementById('hidden-count').textContent = `Hidden: ${parts.join(', ')}`;
+    }
 
     function rid(r) { return r.id != null ? 'db:' + r.id : 'csv:' + r.name; }
 
@@ -609,16 +657,18 @@
     function renderEntry() {
       const root = document.getElementById('entry-view');
       if (!shortlist.length) { root.innerHTML = ''; return; }
-      root.innerHTML = shortlist.map(r => {
+      const days = visibleDays();
+      root.innerHTML = visibleShortlist().map(r => {
         const id = rid(r);
         const meta = [r.location, r.priceTier].filter(Boolean).join(' • ');
-        const cells = TRIP_DAYS.map(td => {
+        const cells = days.map(td => {
           const val = (availability[id] && availability[id][td.date]) || '';
           return `
             <div class="flex flex-col gap-1">
               <div class="text-[10px] flex items-center justify-between gap-1">
                 <span class="font-semibold text-white/70">${dateShort(td)}</span>
-                <span class="text-white/30 truncate">${esc(shortPark(td.defaultPark))}</span>
+                <span class="text-white/30 truncate flex-1 text-right">${esc(shortPark(td.defaultPark))}</span>
+                <span class="hide-btn" data-act="hide-date" data-date="${td.date}" title="Hide this date">×</span>
               </div>
               ${summaryHTML(td.date, { maxLen: 11 })}
               <div class="${cellClasses(r, td.date)}" data-id="${attr(id)}" data-date="${td.date}">
@@ -636,9 +686,10 @@
               <div class="flex items-center gap-1 flex-shrink-0 flex-wrap justify-end">
                 ${vipBadge(r)}
                 ${r.creditType ? `<span class="badge ${badgeCls(r.creditType)}">${r.creditType}</span>` : ''}
+                <span class="hide-btn" data-act="hide-rid" data-rid="${attr(id)}" title="Hide this restaurant">×</span>
               </div>
             </div>
-            <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
+            <div class="grid gap-2" style="grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));">
               ${cells}
             </div>
           </div>`;
@@ -649,16 +700,22 @@
       const root = document.getElementById('matrix-view');
       if (!shortlist.length) { root.innerHTML = ''; return; }
 
-      const headerCells = TRIP_DAYS.map(td => `
+      const days = visibleDays();
+      const headerCells = days.map(td => `
         <th class="px-2 py-2 text-xs text-left font-semibold min-w-[140px] align-top">
-          <div>${dateShort(td)}</div>
-          <div class="text-[10px] text-white/40 font-normal">${esc(shortPark(td.defaultPark))}</div>
+          <div class="flex items-start justify-between gap-1">
+            <div>
+              <div>${dateShort(td)}</div>
+              <div class="text-[10px] text-white/40 font-normal">${esc(shortPark(td.defaultPark))}</div>
+            </div>
+            <span class="hide-btn" data-act="hide-date" data-date="${td.date}" title="Hide this date">×</span>
+          </div>
           ${summaryHTML(td.date)}
         </th>`).join('');
 
-      const rows = shortlist.map(r => {
+      const rows = visibleShortlist().map(r => {
         const id = rid(r);
-        const cells = TRIP_DAYS.map(td => {
+        const cells = days.map(td => {
           const val = (availability[id] && availability[id][td.date]) || '';
           return `<td class="px-1 py-1 align-top">
             <div class="${cellClasses(r, td.date)}" data-id="${attr(id)}" data-date="${td.date}">
@@ -668,11 +725,16 @@
         }).join('');
         return `<tr class="${rowCls(r)}">
           <td class="name-col px-3 py-2 align-top min-w-[200px]">
-            <div class="text-xs font-medium">${esc(r.name)}</div>
-            <div class="text-[10px] text-white/40">${esc(r.location || '')}</div>
-            <div class="mt-1 flex flex-wrap gap-1">
-              ${r.creditType ? `<span class="badge ${badgeCls(r.creditType)}">${r.creditType}</span>` : ''}
-              ${vipBadge(r)}
+            <div class="flex items-start justify-between gap-1">
+              <div class="min-w-0 flex-1">
+                <div class="text-xs font-medium truncate">${esc(r.name)}</div>
+                <div class="text-[10px] text-white/40 truncate">${esc(r.location || '')}</div>
+                <div class="mt-1 flex flex-wrap gap-1">
+                  ${r.creditType ? `<span class="badge ${badgeCls(r.creditType)}">${r.creditType}</span>` : ''}
+                  ${vipBadge(r)}
+                </div>
+              </div>
+              <span class="hide-btn" data-act="hide-rid" data-rid="${attr(id)}" title="Hide this restaurant">×</span>
             </div>
           </td>
           ${cells}
@@ -721,6 +783,20 @@
       if (!r) return null;
       return { cell, id, date, r };
     }
+
+    // Hide-button clicks (handled outside cellContext since they live in headers/name col)
+    document.body.addEventListener('click', e => {
+      const hideBtn = e.target.closest('[data-act="hide-rid"], [data-act="hide-date"]');
+      if (!hideBtn) return;
+      const act = hideBtn.getAttribute('data-act');
+      if (act === 'hide-rid') hiddenRids.add(hideBtn.getAttribute('data-rid'));
+      else hiddenDates.add(hideBtn.getAttribute('data-date'));
+      saveHidden();
+      updateHiddenBar();
+      renderEntry();
+      renderMatrix();
+      lucide.createIcons();
+    });
 
     // Click delegation: pick chip / delete chip / book / unbook
     document.body.addEventListener('click', e => {
@@ -857,6 +933,16 @@
       document.getElementById('theme-icon').setAttribute('data-lucide', 'sun');
     }
 
+    document.getElementById('show-all-hidden').addEventListener('click', () => {
+      hiddenRids.clear();
+      hiddenDates.clear();
+      saveHidden();
+      updateHiddenBar();
+      renderEntry();
+      renderMatrix();
+      lucide.createIcons();
+    });
+
     if (!shortlist.length) {
       document.getElementById('empty-state').classList.remove('hidden');
       document.getElementById('view-entry').disabled = true;
@@ -866,6 +952,7 @@
       renderMatrix();
     }
     setView(currentView);
+    updateHiddenBar();
     lucide.createIcons();
   </script>
 </body>

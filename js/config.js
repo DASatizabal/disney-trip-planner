@@ -1,5 +1,5 @@
-const APP_VERSION = '1.9.2';
-const APP_BUILD = '110b74f';
+const APP_VERSION = '1.10.0';
+const APP_BUILD = '0eb23a1';
 
 const FAMILY = [
   { id: 'david', name: 'David', age: 'adult', ddpFree: false, canDrink: true, dietary: null },
