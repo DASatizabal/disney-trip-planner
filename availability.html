@@ -491,7 +491,21 @@
         .replace('Water Park - Blizzard Beach', 'WP Blizzard')
         .replace('Hollywood Studios', 'HS')
         .replace('Magic Kingdom', 'MK')
-        .replace('Animal Kingdom', 'AK');
+        .replace('Animal Kingdom', 'AK')
+        .replace('Disney Springs', 'DS')
+        .replace('Resort Day', 'Resort')
+        .replace('Travel Day', 'Travel')
+        .replace('Split Day', 'Split');
+    }
+    // Display the user's actual park assignment (from the active plan), not
+    // the static defaultPark. Split days show both halves: "AK → HS".
+    function displayPark(td) {
+      const plan = activePlan && activePlan.plan;
+      const day = plan && plan.days && plan.days[td.date];
+      if (day && day.splitDay && day.splitParks) {
+        return `${shortPark(day.splitParks.am)} → ${shortPark(day.splitParks.pm)}`;
+      }
+      return shortPark((day && day.park) || td.defaultPark);
     }
     function dateShort(td) {
       const d = new Date(td.date + 'T12:00:00');
@@ -765,7 +779,7 @@
             <div class="flex flex-col gap-1">
               <div class="text-[10px] flex items-center justify-between gap-1">
                 <span class="font-semibold text-white/70">${dateShort(td)}</span>
-                <span class="text-white/30 truncate flex-1 text-right">${esc(shortPark(td.defaultPark))}</span>
+                <span class="text-white/30 truncate flex-1 text-right">${esc(displayPark(td))}</span>
                 <span class="hide-btn" data-act="hide-date" data-date="${td.date}" title="Hide this date">×</span>
               </div>
               ${summaryHTML(td.date, { maxLen: 11 })}
@@ -804,7 +818,7 @@
           <div class="flex items-start justify-between gap-1">
             <div>
               <div>${dateShort(td)}</div>
-              <div class="text-[10px] text-white/40 font-normal">${esc(shortPark(td.defaultPark))}</div>
+              <div class="text-[10px] text-white/40 font-normal">${esc(displayPark(td))}</div>
             </div>
             <span class="hide-btn" data-act="hide-date" data-date="${td.date}" title="Hide this date">×</span>
           </div>
