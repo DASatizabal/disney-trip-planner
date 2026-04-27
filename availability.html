@@ -969,6 +969,38 @@
       URL.revokeObjectURL(url);
     }
 
+    // Resolve a JSON-import key to {rid, restaurant}. Lenient about format:
+    //   "db:5", "csv:Be Our Guest"  → strict (preferred)
+    //   "5" or 5                     → treated as db:5
+    //   "Be Our Guest"               → tried as csv:exact, then fuzzy by name
+    function resolveImportKey(rawKey) {
+      const key = String(rawKey).trim();
+      if (!key) return null;
+      // Strict prefixes
+      if (key.startsWith('db:')) {
+        const n = parseInt(key.slice(3), 10);
+        const r = allMerged.find(x => x.id === n);
+        return r ? { rid: 'db:' + n, restaurant: r } : null;
+      }
+      if (key.startsWith('csv:')) {
+        const name = key.slice(4);
+        let r = allMerged.find(x => x.id == null && x.name === name);
+        if (!r) r = RestaurantMerge.findByName(name); // fuzzy fallback
+        return r ? { rid: rid(r), restaurant: r } : null;
+      }
+      // Bare numeric → try as DB id
+      if (/^\d+$/.test(key)) {
+        const n = parseInt(key, 10);
+        const r = allMerged.find(x => x.id === n);
+        if (r) return { rid: 'db:' + n, restaurant: r };
+      }
+      // Bare string → try exact-name match (DB or CSV), then fuzzy
+      let r = allMerged.find(x => x.name === key);
+      if (!r) r = RestaurantMerge.findByName(key);
+      if (r) return { rid: rid(r), restaurant: r };
+      return null;
+    }
+
     document.getElementById('import-file').addEventListener('change', e => {
       const file = e.target.files && e.target.files[0];
       if (!file) return;
@@ -981,37 +1013,51 @@
           }
           let cellCount = 0;
           let addedCount = 0;
-          let unmatchedCount = 0;
-          const shortlistSet = new Set(shortlistIds);
-          for (const [id, dates] of Object.entries(data)) {
+          let alreadyCount = 0;
+          const unmatched = [];
+          // Use the resolved shortlist (live array) as the source of truth —
+          // entries in shortlistIds that don't resolve count as orphans and
+          // should be replaced, not skipped.
+          const liveSet = new Set(shortlist.map(r => rid(r)));
+          for (const [rawKey, dates] of Object.entries(data)) {
             if (!dates || typeof dates !== 'object') continue;
-            if (!availability[id]) availability[id] = {};
+            const resolved = resolveImportKey(rawKey);
+            // Pick the canonical key for storage. If unresolved, keep raw key
+            // so cells aren't lost (they just won't render until the rid is
+            // matched manually).
+            const storeKey = resolved ? resolved.rid : rawKey;
+            if (!availability[storeKey]) availability[storeKey] = {};
             for (const [date, val] of Object.entries(dates)) {
               if (typeof val === 'string' && val.trim()) {
-                availability[id][date] = val.trim();
+                availability[storeKey][date] = val.trim();
                 cellCount++;
               }
             }
-            if (Object.keys(availability[id]).length === 0) {
-              delete availability[id];
+            if (Object.keys(availability[storeKey]).length === 0) {
+              delete availability[storeKey];
               continue;
             }
-            // Auto-add to shortlist so the imported restaurants actually
-            // render — without this the matrix stays empty until the user
-            // hand-checks each one on restaurants.html.
-            if (!shortlistSet.has(id)) {
-              const r = allMerged.find(x => rid(x) === id);
-              if (r) {
-                shortlistSet.add(id);
-                shortlistIds.push(id);
-                shortlist.push(r);
-                hiddenRids.delete(id); // un-hide if previously hidden
-                addedCount++;
-              } else {
-                unmatchedCount++;
-              }
+            if (!resolved) {
+              unmatched.push(rawKey);
+              continue;
             }
+            if (liveSet.has(resolved.rid)) {
+              alreadyCount++;
+              continue;
+            }
+            liveSet.add(resolved.rid);
+            shortlistIds.push(resolved.rid);
+            shortlist.push(resolved.restaurant);
+            hiddenRids.delete(resolved.rid);
+            addedCount++;
           }
+          // Drop orphaned ids from shortlistIds so the saved list matches the
+          // resolved live set (avoids the "looks empty even though IDs are
+          // saved" failure mode this fix is targeting).
+          const beforeCleanup = shortlistIds.length;
+          shortlistIds = shortlistIds.filter(id => liveSet.has(id));
+          const cleanedOrphans = beforeCleanup - shortlistIds.length;
+
           saveAvailability();
           localStorage.setItem(SHORTLIST_KEY, JSON.stringify(shortlistIds));
           saveHidden();
@@ -1026,10 +1072,17 @@
           renderMatrix();
           setView(currentView);
           lucide.createIcons();
-          const parts = [`Imported ${cellCount} availability entries.`];
-          if (addedCount) parts.push(`Added ${addedCount} restaurant${addedCount === 1 ? '' : 's'} to shortlist.`);
-          if (unmatchedCount) parts.push(`${unmatchedCount} id${unmatchedCount === 1 ? '' : 's'} did not match any restaurant — those cells were saved but won't display.`);
-          alert(parts.join(' '));
+
+          const parts = [`Imported ${cellCount} availability entries across ${Object.keys(data).length} restaurants.`];
+          if (addedCount)     parts.push(`Added ${addedCount} to shortlist.`);
+          if (alreadyCount)   parts.push(`${alreadyCount} already shortlisted.`);
+          if (cleanedOrphans) parts.push(`Cleaned ${cleanedOrphans} orphaned id${cleanedOrphans === 1 ? '' : 's'} from shortlist.`);
+          if (unmatched.length) {
+            const sample = unmatched.slice(0, 3).map(k => `"${k}"`).join(', ');
+            const more = unmatched.length > 3 ? ` (+${unmatched.length - 3} more)` : '';
+            parts.push(`${unmatched.length} key${unmatched.length === 1 ? '' : 's'} did not match any restaurant: ${sample}${more}. Cells were saved but won't display until you fix the keys.`);
+          }
+          alert(parts.join('\n'));
         } catch (err) {
           alert('Failed to import: ' + err.message);
         } finally {
