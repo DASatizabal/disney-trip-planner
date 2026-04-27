@@ -14,6 +14,13 @@ const Planner = {
     const container = document.getElementById('planner-container');
     container.innerHTML = '';
 
+    // Precompute sim pool attribution once per render so day columns and
+    // dashboard stay consistent (overlap-day spill from A→B depends on
+    // running remaining across all earlier sim picks).
+    const simResult = this._computeAllSimUsage();
+    this._simUsageByPool = simResult.usage;
+    this._simAttribution = simResult.attribution;
+
     TRIP_DAYS.forEach((td, idx) => {
       const day = this._planState.days[td.date];
       const col = this._renderDayColumn(td, day, idx);
@@ -208,28 +215,51 @@ const Planner = {
 
   // Project sim picks → DDP credit usage per pool. Mirrors the booking
   // defaults in availability.html: paymentMethod=ddp (when acceptsDDP),
-  // pool=day's primary, all four diners. Snacks burn 1 SN regardless of
-  // diner count; meals multiply credits by diner count (4).
-  _getSimUsageForPool(poolId) {
-    const used = { ts: 0, qs: 0, sn: 0 };
-    if (localStorage.getItem('ddp_planner_sim_picks') !== 'on') return used;
+  // all four diners. Snacks burn 1 SN regardless of diner count; meals
+  // multiply by diner count (4).
+  //
+  // Overlap days (June 8: A expiring + B fresh) drain A first if A has
+  // remaining capacity for the category — A's credits expire that night
+  // so spending B's first would waste them.
+  _computeAllSimUsage() {
+    const usage = { A: { ts: 0, qs: 0, sn: 0 }, B: { ts: 0, qs: 0, sn: 0 } };
+    const attribution = {}; // `${date}|${rid}|${time}` -> 'A' | 'B' | 'oop'
+    if (localStorage.getItem('ddp_planner_sim_picks') !== 'on') return { usage, attribution };
+    const balA = CreditEngine.getBalance('A', this._planState);
+    const balB = CreditEngine.getBalance('B', this._planState);
+    const rem = {
+      A: { ts: balA.ts.remaining, qs: balA.qs.remaining, sn: balA.sn.remaining },
+      B: { ts: balB.ts.remaining, qs: balB.qs.remaining, sn: balB.sn.remaining }
+    };
     TRIP_DAYS.forEach(td => {
-      if (td.pool !== poolId) return;
       const day = this._planState.days[td.date];
       if (!day) return;
-      const sims = this._getSimEntriesForDay(td.date, day);
+      const sims = this._getSimEntriesForDay(td.date, day)
+        .slice()
+        .sort((a, b) => a.time.localeCompare(b.time));
       sims.forEach(s => {
+        const key = `${td.date}|${s.rid}|${s.time}`;
         const r = s.restaurant;
-        if (!r || r.creditCategory === 'oop' || !r.acceptsDDP) return;
+        if (!r || r.creditCategory === 'oop' || !r.acceptsDDP) {
+          attribution[key] = 'oop';
+          return;
+        }
         const cat = r.creditCategory;
-        if (!(cat in used)) return;
-        const credits = cat === 'sn'
-          ? r.creditsConsumed
-          : r.creditsConsumed * FAMILY.length;
-        used[cat] += credits;
+        if (!(cat in usage.A)) return;
+        const credits = cat === 'sn' ? r.creditsConsumed : r.creditsConsumed * FAMILY.length;
+        // Overlap day (June 8: A expiring + B fresh) drains A first when
+        // A still has capacity for this category — A expires that night,
+        // so spending B first wastes A's credits.
+        let pool = td.pool;
+        if (td.overlapPool === 'A' && td.pool === 'B' && rem.A[cat] >= credits) {
+          pool = 'A';
+        }
+        usage[pool][cat] += credits;
+        rem[pool][cat] -= credits;
+        attribution[key] = pool;
       });
     });
-    return used;
+    return { usage, attribution };
   },
 
   _normalizeSimTime(s) {
@@ -406,6 +436,13 @@ const Planner = {
     const r = sim.restaurant;
     const time = sim.time;
     const badgeClass = this._creditBadgeClass(r.creditType);
+    const key = `${td.date}|${sim.rid}|${sim.time}`;
+    const attributedPool = this._simAttribution ? this._simAttribution[key] : null;
+    const poolBadge = attributedPool && attributedPool !== 'oop'
+      ? `<span class="badge badge-pool-${attributedPool.toLowerCase()}" title="Would attribute to Bucket ${attributedPool}">DDP ${attributedPool}</span>`
+      : attributedPool === 'oop'
+        ? '<span class="badge badge-oop">OOP</span>'
+        : '';
     return `
       <div class="meal-slot meal-slot-sim relative" title="Simulated pick from Availability — not booked">
         <div class="flex items-start justify-between gap-1">
@@ -416,6 +453,7 @@ const Planner = {
             <div class="text-xs font-medium truncate">${this._escapeHtml(r.name)}</div>
             <div class="flex items-center gap-1 mt-0.5 flex-wrap">
               ${r.creditType ? `<span class="badge ${badgeClass}">${r.creditType}</span>` : ''}
+              ${poolBadge}
               <span class="badge badge-sim">SIM</span>
               ${r.location ? `<span class="text-[9px] text-white/30 truncate">${this._escapeHtml(r.location)}</span>` : ''}
             </div>
@@ -546,9 +584,12 @@ const Planner = {
   // Credit Dashboard
   renderCreditDashboard() {
     const simOn = localStorage.getItem('ddp_planner_sim_picks') === 'on';
+    const simAll = (simOn && this._simUsageByPool)
+      ? this._simUsageByPool
+      : { A: { ts: 0, qs: 0, sn: 0 }, B: { ts: 0, qs: 0, sn: 0 } };
     ['A', 'B'].forEach(poolId => {
       const balance = CreditEngine.getBalance(poolId, this._planState);
-      const sim = simOn ? this._getSimUsageForPool(poolId) : { ts: 0, qs: 0, sn: 0 };
+      const sim = simAll[poolId];
       const p = poolId.toLowerCase();
 
       ['ts', 'qs', 'sn'].forEach(type => {

@@ -296,6 +296,7 @@
   <script src="js/csv-restaurants.js"></script>
   <script src="js/restaurant-merge.js"></script>
   <script src="js/storage.js"></script>
+  <script src="js/credit-engine.js"></script>
   <script>
     const SHORTLIST_KEY = 'ddp_planner_shortlist';
     const AVAIL_KEY = 'ddp_planner_availability';
@@ -633,17 +634,31 @@
       }
       const td = TRIP_DAYS.find(d => d.date === date);
       const acceptsDDP = r.acceptsDDP !== false;
+      const diners = ['david', 'lisa', 'dante', 'djr'];
       day.selections[slot] = {
         restaurantId: r.id,
         paymentMethod: acceptsDDP ? 'ddp' : 'oop',
-        pool: acceptsDDP ? (td ? td.pool : null) : null,
+        pool: acceptsDDP ? choosePoolForBooking(td, r, diners) : null,
         notes: '',
         adrNumber: '',
-        diners: ['david', 'lisa', 'dante', 'djr'],
+        diners,
         time: normalizeHHMM(time)
       };
       saveActivePlan(activePlan.name, activePlan.plan);
       return true;
+    }
+
+    // On overlap days (June 8: A expiring + B fresh), drain A first if A
+    // still has capacity for this credit category — A's credits expire
+    // that night, so spending B first wastes them.
+    function choosePoolForBooking(td, r, diners) {
+      if (!td) return null;
+      if (!(td.overlapPool === 'A' && td.pool === 'B')) return td.pool;
+      const cat = r.creditCategory;
+      if (!cat || cat === 'oop') return td.pool;
+      const needed = cat === 'sn' ? r.creditsConsumed : r.creditsConsumed * (diners?.length || 4);
+      const balanceA = CreditEngine.getBalance('A', activePlan.plan);
+      return balanceA[cat] && balanceA[cat].remaining >= needed ? 'A' : td.pool;
     }
 
     function unbookSelection(r, date) {
