@@ -377,6 +377,9 @@
       if (cleaned.length <= maxLen) return cleaned;
       return cleaned.slice(0, Math.max(1, maxLen - 1)) + '…';
     }
+    // Park codes for the four theme parks (per user spec: M/A/H/E), plus Disney Springs
+    // and the two water parks. Resort/Travel/Split days aren't parks — return blank
+    // so the event line just shows time + name without a meaningless code.
     function parkLetter(park) {
       if (!park) return '';
       if (park === 'Magic Kingdom')      return 'M';
@@ -384,13 +387,9 @@
       if (park === 'Hollywood Studios')  return 'H';
       if (park === 'Animal Kingdom')     return 'A';
       if (park === 'Disney Springs')     return 'DS';
-      if (park === 'Resort Day')         return 'R';
       if (park.indexOf('Typhoon') >= 0)  return 'TL';
       if (park.indexOf('Blizzard') >= 0) return 'BB';
-      if (park === 'Travel Day')         return 'TD';
-      if (park === 'Split Day')          return 'SP';
-      if (park === 'none')               return '';
-      return park.slice(0, 2).toUpperCase();
+      return '';
     }
     function summarizeDay(date) {
       const day = activePlan.plan.days && activePlan.plan.days[date];
