@@ -206,6 +206,32 @@ const Planner = {
     return null;
   },
 
+  // Project sim picks → DDP credit usage per pool. Mirrors the booking
+  // defaults in availability.html: paymentMethod=ddp (when acceptsDDP),
+  // pool=day's primary, all four diners. Snacks burn 1 SN regardless of
+  // diner count; meals multiply credits by diner count (4).
+  _getSimUsageForPool(poolId) {
+    const used = { ts: 0, qs: 0, sn: 0 };
+    if (localStorage.getItem('ddp_planner_sim_picks') !== 'on') return used;
+    TRIP_DAYS.forEach(td => {
+      if (td.pool !== poolId) return;
+      const day = this._planState.days[td.date];
+      if (!day) return;
+      const sims = this._getSimEntriesForDay(td.date, day);
+      sims.forEach(s => {
+        const r = s.restaurant;
+        if (!r || r.creditCategory === 'oop' || !r.acceptsDDP) return;
+        const cat = r.creditCategory;
+        if (!(cat in used)) return;
+        const credits = cat === 'sn'
+          ? r.creditsConsumed
+          : r.creditsConsumed * FAMILY.length;
+        used[cat] += credits;
+      });
+    });
+    return used;
+  },
+
   _normalizeSimTime(s) {
     if (!s) return null;
     const t = String(s).trim().toLowerCase().replace(/\s+/g, '');
@@ -519,21 +545,59 @@ const Planner = {
 
   // Credit Dashboard
   renderCreditDashboard() {
+    const simOn = localStorage.getItem('ddp_planner_sim_picks') === 'on';
     ['A', 'B'].forEach(poolId => {
       const balance = CreditEngine.getBalance(poolId, this._planState);
+      const sim = simOn ? this._getSimUsageForPool(poolId) : { ts: 0, qs: 0, sn: 0 };
       const p = poolId.toLowerCase();
 
       ['ts', 'qs', 'sn'].forEach(type => {
         const b = balance[type];
-        const pct = b.total > 0 ? Math.max(0, (b.remaining / b.total) * 100) : 0;
-        const color = pct > 50 ? 'green' : pct > 25 ? 'yellow' : 'red';
-
+        const used = b.used;
+        const total = b.total;
+        const simN = sim[type] || 0;
         const label = document.getElementById(`pool-${p}-${type}`);
+        const simLabel = document.getElementById(`pool-${p}-${type}-sim`);
         const bar = document.getElementById(`pool-${p}-${type}-bar`);
-        if (label) label.textContent = `${b.remaining}/${b.total}`;
-        if (bar) {
-          bar.style.width = `${pct}%`;
-          bar.className = `credit-bar-fill ${color}`;
+        const simBar = document.getElementById(`pool-${p}-${type}-sim-bar`);
+
+        if (simOn) {
+          // Stacked-used mode: green = confirmed, purple = sim, gray = remaining
+          const usedPct = total > 0 ? Math.min(100, Math.max(0, (used / total) * 100)) : 0;
+          const simPct = total > 0 ? Math.min(Math.max(0, 100 - usedPct), Math.max(0, (simN / total) * 100)) : 0;
+          if (label) {
+            label.textContent = `${used}/${total}`;
+            label.className = 'text-green-400';
+          }
+          if (simLabel) {
+            simLabel.textContent = `${used + simN}/${total}`;
+            simLabel.style.display = '';
+          }
+          if (bar) {
+            bar.style.width = `${usedPct}%`;
+            bar.className = 'credit-bar-fill green';
+          }
+          if (simBar) {
+            simBar.style.width = `${simPct}%`;
+            simBar.style.display = '';
+          }
+        } else {
+          // Remaining mode (existing behavior)
+          const pct = total > 0 ? Math.max(0, (b.remaining / total) * 100) : 0;
+          const color = pct > 50 ? 'green' : pct > 25 ? 'yellow' : 'red';
+          if (label) {
+            label.textContent = `${b.remaining}/${total}`;
+            label.className = '';
+          }
+          if (simLabel) simLabel.style.display = 'none';
+          if (bar) {
+            bar.style.width = `${pct}%`;
+            bar.className = `credit-bar-fill ${color}`;
+          }
+          if (simBar) {
+            simBar.style.width = '0%';
+            simBar.style.display = 'none';
+          }
         }
       });
 
@@ -541,7 +605,10 @@ const Planner = {
       const compact = document.getElementById(`pool-${p}-compact`);
       if (compact) {
         const ba = balance;
-        compact.textContent = `${ba.ts.remaining}ts ${ba.qs.remaining}qs ${ba.sn.remaining}sn`;
+        const simSuffix = simOn && (sim.ts + sim.qs + sim.sn) > 0
+          ? ` (+${sim.ts}t ${sim.qs}q ${sim.sn}s sim)`
+          : '';
+        compact.textContent = `${ba.ts.remaining}ts ${ba.qs.remaining}qs ${ba.sn.remaining}sn${simSuffix}`;
         compact.className = [ba.ts, ba.qs, ba.sn].some(b => b.remaining < 0) ? 'text-red-400' : '';
       }
     });

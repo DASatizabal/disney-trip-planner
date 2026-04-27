@@ -98,17 +98,19 @@ body.light-mode select optgroup {
   border-radius: 3px;
   background: rgba(255, 255, 255, 0.1);
   overflow: hidden;
+  display: flex;
 }
 
 .credit-bar-fill {
   height: 100%;
-  border-radius: 3px;
   transition: width 0.3s ease, background-color 0.3s ease;
+  flex-shrink: 0;
 }
 
 .credit-bar-fill.green { background: #22c55e; }
 .credit-bar-fill.yellow { background: #f59e0b; }
 .credit-bar-fill.red { background: #ef4444; }
+.credit-bar-fill.purple { background: #a855f7; }
 
 body.light-mode .credit-bar {
   background: rgba(0, 0, 0, 0.08);
