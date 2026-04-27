@@ -235,8 +235,9 @@ const Planner = {
   // so spending B's first would waste them.
   _computeAllSimUsage() {
     const usage = { A: { ts: 0, qs: 0, sn: 0 }, B: { ts: 0, qs: 0, sn: 0 } };
-    const attribution = {}; // `${date}|${rid}|${time}` -> 'A' | 'B' | 'oop'
+    const attribution = {}; // `${date}|${rid}|${time}` -> 'A' | 'B' | 'vip' | 'ap' | 'oop'
     if (localStorage.getItem('ddp_planner_sim_picks') !== 'on') return { usage, attribution };
+    const overrides = this._getSimOverrides();
     const balA = CreditEngine.getBalance('A', this._planState);
     const balB = CreditEngine.getBalance('B', this._planState);
     const rem = {
@@ -252,12 +253,20 @@ const Planner = {
       sims.forEach(s => {
         const key = `${td.date}|${s.rid}|${s.time}`;
         const r = s.restaurant;
-        if (!r || r.creditCategory === 'oop' || !r.acceptsDDP) {
-          attribution[key] = 'oop';
+        if (!r) return;
+        // Effective payment: explicit override wins; default is ddp when
+        // the restaurant accepts DDP, else oop.
+        const defaultMethod = (r.acceptsDDP && r.creditCategory !== 'oop') ? 'ddp' : 'oop';
+        const method = overrides[key] || defaultMethod;
+        if (method !== 'ddp') {
+          attribution[key] = method;
           return;
         }
         const cat = r.creditCategory;
-        if (!(cat in usage.A)) return;
+        if (!(cat in usage.A)) {
+          attribution[key] = 'oop';
+          return;
+        }
         const credits = cat === 'sn' ? r.creditsConsumed : r.creditsConsumed * FAMILY.length;
         // Overlap day (June 8: A expiring + B fresh) drains A first when
         // A still has capacity for this category — A expires that night,
@@ -272,6 +281,102 @@ const Planner = {
       });
     });
     return { usage, attribution };
+  },
+
+  // Sim payment-method overrides — { "date|rid|HH:MM": "ddp"|"vip"|"ap"|"oop" }
+  _getSimOverrides() {
+    try { return JSON.parse(localStorage.getItem('ddp_planner_sim_payment_overrides') || '{}'); }
+    catch (e) { return {}; }
+  },
+
+  _setSimOverride(key, method) {
+    const overrides = this._getSimOverrides();
+    if (!method) delete overrides[key];
+    else overrides[key] = method;
+    localStorage.setItem('ddp_planner_sim_payment_overrides', JSON.stringify(overrides));
+  },
+
+  // Derive a slot string for getVIPInfo. Sim entries don't have a real
+  // slot — we infer from time + creditCategory.
+  _simSlotForVip(sim) {
+    const r = sim.restaurant;
+    if (r && r.creditCategory === 'sn') return 'snack1';
+    const m = String(sim.time || '').match(/^(\d{1,2}):(\d{2})/);
+    if (!m) return 'lunch';
+    const minutes = parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
+    if (minutes < 11 * 60) return 'breakfast';
+    if (minutes < 16 * 60 + 30) return 'lunch';
+    return 'dinner';
+  },
+
+  // Open the payment-method picker for a sim entry. Reuses the existing
+  // payment-modal but populates options with sim-specific callbacks.
+  openSimPayment(simKey) {
+    const [date, ...rest] = simKey.split('|');
+    const time = rest.pop();
+    const rid = rest.join('|'); // rid may contain colons (db:5, csv:Name)
+    const td = TRIP_DAYS.find(d => d.date === date);
+    const day = this._planState.days[date];
+    if (!td || !day) return;
+    const sims = this._getSimEntriesForDay(date, day);
+    const sim = sims.find(s => s.rid === rid && s.time === time);
+    if (!sim) return;
+
+    const r = sim.restaurant;
+    const slot = this._simSlotForVip(sim);
+    const vip = r.id != null ? CreditEngine.getVIPInfo(r.id, date, slot) : { available: false };
+    const ap  = r.id != null ? CreditEngine.getAPInfo(r.id, date, slot)  : { available: false };
+    const acceptsDDP = r.acceptsDDP && r.creditCategory !== 'oop';
+    const overrides = this._getSimOverrides();
+    const currentMethod = overrides[simKey] || (acceptsDDP ? 'ddp' : 'oop');
+    const dataKey = this._escapeHtml(simKey);
+
+    document.getElementById('payment-restaurant-name').textContent = r.name;
+    const ctx = [];
+    ctx.push(`Sim pick · ${MEAL_LABELS[slot] || slot} on ${td.dow}`);
+    if (vip.available) ctx.push(`${vip.pct}% VIP · save ~$${vip.estimatedSavings}`);
+    if (ap.available)  ctx.push(`AP ${ap.pct}% · save ~$${ap.estimatedSavings}`);
+    document.getElementById('payment-context').textContent = ctx.join(' · ');
+
+    const optBtn = (method, classes, title, sub) => `
+      <button data-act="sim-pay" data-key="${dataKey}" data-method="${method}"
+        class="w-full text-left p-3 rounded-lg border ${classes} transition-colors ${method === currentMethod ? 'ring-1 ring-amber-400' : ''}">
+        <div class="text-sm font-medium">${title}${method === currentMethod ? ' ✓' : ''}</div>
+        <div class="text-[11px] text-white/40 mt-0.5">${sub}</div>
+      </button>`;
+
+    const opts = [];
+    if (vip.available) {
+      const oop = Math.round((r.avgAdultPrice || 40) * (FAMILY.length - 1) * (1 - vip.pct / 100));
+      opts.push(optBtn('vip', 'border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20',
+        `<span class="text-amber-300">Use ${vip.pct}% VIP discount</span>`,
+        `Pay OOP ~$${oop} and save the DDP credit`));
+    }
+    if (ap.available) {
+      const oop = Math.round((r.avgAdultPrice || 40) * (FAMILY.length - 1) * (1 - ap.pct / 100));
+      opts.push(optBtn('ap', 'border-amber-400/20 bg-amber-400/5 hover:bg-amber-400/10',
+        `<span class="text-amber-200">Use AP ${ap.pct}% discount</span>`,
+        `Pay OOP ~$${oop}${ap.notes ? ' — ' + ap.notes : ''}`));
+    }
+    if (acceptsDDP) {
+      const cat = r.creditCategory;
+      const credits = cat === 'sn' ? r.creditsConsumed : r.creditsConsumed * FAMILY.length;
+      opts.push(optBtn('ddp', 'border-white/10 hover:bg-white/5',
+        'Use DDP Credit',
+        `${credits} ${(cat || 'ts').toUpperCase()} credit${credits > 1 ? 's' : ''}`));
+    }
+    opts.push(optBtn('oop', 'border-white/10 hover:bg-white/5',
+      '<span class="text-white/60">Pay Out of Pocket (Full Price)</span>',
+      'Don\'t spend a credit'));
+
+    document.getElementById('payment-options').innerHTML = opts.join('');
+    document.getElementById('payment-modal').classList.add('active');
+  },
+
+  _onSimPaymentChoice(simKey, method) {
+    this._setSimOverride(simKey, method);
+    document.getElementById('payment-modal').classList.remove('active');
+    this.render();
   },
 
   _normalizeSimTime(s) {
@@ -450,14 +555,8 @@ const Planner = {
     const time = sim.time;
     const badgeClass = this._creditBadgeClass(r.creditType);
     const key = `${td.date}|${sim.rid}|${sim.time}`;
-    const attributedPool = this._simAttribution ? this._simAttribution[key] : null;
-    const poolBadge = attributedPool && attributedPool !== 'oop'
-      ? `<span class="badge badge-pool-${attributedPool.toLowerCase()}" title="Would attribute to Bucket ${attributedPool}">DDP ${attributedPool}</span>`
-      : attributedPool === 'oop'
-        ? '<span class="badge badge-oop">OOP</span>'
-        : '';
     return `
-      <div class="meal-slot meal-slot-sim relative" title="Simulated pick from Availability — not booked">
+      <div class="meal-slot meal-slot-sim relative cursor-pointer" data-sim-key="${this._escapeHtml(key)}" title="Click to choose payment method">
         <div class="flex items-start justify-between gap-1">
           <div class="min-w-0 flex-1">
             <div class="text-[9px] text-white/30 uppercase tracking-wider mb-0.5">
@@ -466,7 +565,7 @@ const Planner = {
             <div class="text-xs font-medium truncate">${this._escapeHtml(r.name)}</div>
             <div class="flex items-center gap-1 mt-0.5 flex-wrap">
               ${r.creditType ? `<span class="badge ${badgeClass}">${r.creditType}</span>` : ''}
-              ${poolBadge}
+              ${this._simMethodBadge(key)}
               <span class="badge badge-sim">SIM</span>
               ${r.location ? `<span class="text-[9px] text-white/30 truncate">${this._escapeHtml(r.location)}</span>` : ''}
             </div>
@@ -474,6 +573,19 @@ const Planner = {
         </div>
       </div>
     `;
+  },
+
+  // Render the payment-method badge for a sim entry, reflecting any
+  // override the user has selected via the sim payment picker.
+  _simMethodBadge(key) {
+    const attr = this._simAttribution && this._simAttribution[key];
+    if (attr === 'A' || attr === 'B') {
+      return `<span class="badge badge-pool-${attr.toLowerCase()}" title="Would attribute to Bucket ${attr}">DDP ${attr}</span>`;
+    }
+    if (attr === 'vip') return '<span class="badge badge-vip">VIP</span>';
+    if (attr === 'ap')  return '<span class="badge badge-vip">AP</span>';
+    if (attr === 'oop') return '<span class="badge badge-oop">OOP</span>';
+    return '';
   },
 
   // Snacks are not scheduled — render them as a flat list below the
@@ -565,18 +677,14 @@ const Planner = {
     const r = sim.restaurant;
     const badgeClass = this._creditBadgeClass(r.creditType);
     const key = `${td.date}|${sim.rid}|${sim.time}`;
-    const attributedPool = this._simAttribution ? this._simAttribution[key] : null;
-    const poolBadge = attributedPool && attributedPool !== 'oop'
-      ? `<span class="badge badge-pool-${attributedPool.toLowerCase()}" title="Would attribute to Bucket ${attributedPool}">DDP ${attributedPool}</span>`
-      : '';
     return `
-      <div class="meal-slot meal-slot-sim snack-card relative" title="Simulated snack pick from Availability — not booked">
+      <div class="meal-slot meal-slot-sim snack-card relative cursor-pointer" data-sim-key="${this._escapeHtml(key)}" title="Click to choose payment method">
         <div class="flex items-center justify-between gap-1">
           <div class="min-w-0 flex-1">
             <div class="text-xs font-medium truncate">${this._escapeHtml(r.name)}</div>
             <div class="flex items-center gap-1 mt-0.5 flex-wrap">
               ${r.creditType ? `<span class="badge ${badgeClass}">${r.creditType}</span>` : ''}
-              ${poolBadge}
+              ${this._simMethodBadge(key)}
               <span class="badge badge-sim">SIM</span>
               ${r.location ? `<span class="text-[9px] text-white/30 truncate">${this._escapeHtml(r.location)}</span>` : ''}
             </div>
@@ -1735,3 +1843,18 @@ document.addEventListener('dragover',  (e) => Planner._onDragOver(e));
 document.addEventListener('dragleave', (e) => Planner._onDragLeave(e));
 document.addEventListener('drop',      (e) => Planner._onDrop(e));
 document.addEventListener('dragend',   (e) => Planner._onDragEnd(e));
+
+// Sim card click → open payment picker; option button click → save choice.
+// Event delegation avoids escaping rid/time into inline onclick attributes.
+document.addEventListener('click', (e) => {
+  const optBtn = e.target.closest('[data-act="sim-pay"]');
+  if (optBtn) {
+    e.preventDefault();
+    Planner._onSimPaymentChoice(optBtn.dataset.key, optBtn.dataset.method);
+    return;
+  }
+  const simCard = e.target.closest('[data-sim-key]');
+  if (simCard) {
+    Planner.openSimPayment(simCard.dataset.simKey);
+  }
+});

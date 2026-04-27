@@ -43,7 +43,8 @@ const App = {
       if (!e.key) return;
       if (e.key === 'ddp_planner_sim_picks' ||
           e.key === 'ddp_planner_availability' ||
-          e.key === 'ddp_planner_shortlist') {
+          e.key === 'ddp_planner_shortlist' ||
+          e.key === 'ddp_planner_sim_payment_overrides') {
         Planner.render();
       }
     });
