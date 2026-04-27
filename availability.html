@@ -252,6 +252,12 @@
         <button id="view-entry"  class="view-btn px-2 py-1 text-xs rounded-md transition-colors">Entry</button>
         <button id="view-matrix" class="view-btn px-2 py-1 text-xs rounded-md transition-colors">Matrix</button>
       </div>
+      <button id="sim-toggle" onclick="toggleSimMode()"
+        class="px-2 py-1 text-xs rounded-md border border-white/10 hover:bg-white/10 transition-colors flex items-center gap-1"
+        title="Show picked-but-not-booked times in the Planner as preview overlays">
+        <i data-lucide="eye" class="w-3.5 h-3.5"></i>
+        <span class="hidden sm:inline">Sim</span>
+      </button>
       <button onclick="exportAvailability()" class="p-1.5 hover:bg-white/10 rounded-lg transition-colors" title="Export availability JSON">
         <i data-lucide="upload" class="w-4 h-4"></i>
       </button>
@@ -296,6 +302,25 @@
     const VIEW_KEY = 'ddp_planner_avail_view';
     const HIDDEN_RIDS_KEY = 'ddp_planner_avail_hidden_rids';
     const HIDDEN_DATES_KEY = 'ddp_planner_avail_hidden_dates';
+    const SIM_KEY = 'ddp_planner_sim_picks';
+
+    function isSimOn() { return localStorage.getItem(SIM_KEY) === 'on'; }
+    function syncSimButton() {
+      const btn = document.getElementById('sim-toggle');
+      if (!btn) return;
+      const on = isSimOn();
+      btn.style.background = on ? 'rgba(168, 85, 247, 0.25)' : '';
+      btn.style.borderColor = on ? 'rgba(168, 85, 247, 0.6)' : '';
+      btn.style.color = on ? '#d8b4fe' : '';
+      btn.title = on
+        ? 'Sim ON — picked times overlay the Planner. Click to turn off.'
+        : 'Show picked-but-not-booked times in the Planner as preview overlays';
+    }
+    function toggleSimMode() {
+      if (isSimOn()) localStorage.removeItem(SIM_KEY);
+      else localStorage.setItem(SIM_KEY, 'on');
+      syncSimButton();
+    }
 
     let hiddenRids = new Set();
     let hiddenDates = new Set();
@@ -955,6 +980,9 @@
             throw new Error('Expected an object keyed by restaurant id');
           }
           let cellCount = 0;
+          let addedCount = 0;
+          let unmatchedCount = 0;
+          const shortlistSet = new Set(shortlistIds);
           for (const [id, dates] of Object.entries(data)) {
             if (!dates || typeof dates !== 'object') continue;
             if (!availability[id]) availability[id] = {};
@@ -964,13 +992,44 @@
                 cellCount++;
               }
             }
-            if (Object.keys(availability[id]).length === 0) delete availability[id];
+            if (Object.keys(availability[id]).length === 0) {
+              delete availability[id];
+              continue;
+            }
+            // Auto-add to shortlist so the imported restaurants actually
+            // render — without this the matrix stays empty until the user
+            // hand-checks each one on restaurants.html.
+            if (!shortlistSet.has(id)) {
+              const r = allMerged.find(x => rid(x) === id);
+              if (r) {
+                shortlistSet.add(id);
+                shortlistIds.push(id);
+                shortlist.push(r);
+                hiddenRids.delete(id); // un-hide if previously hidden
+                addedCount++;
+              } else {
+                unmatchedCount++;
+              }
+            }
           }
           saveAvailability();
+          localStorage.setItem(SHORTLIST_KEY, JSON.stringify(shortlistIds));
+          saveHidden();
+          document.getElementById('count-tag').textContent = shortlist.length ? `${shortlist.length} saved` : '';
+          if (shortlist.length) {
+            document.getElementById('empty-state').classList.add('hidden');
+            document.getElementById('view-entry').disabled = false;
+            document.getElementById('view-matrix').disabled = false;
+          }
+          updateHiddenBar();
           renderEntry();
           renderMatrix();
+          setView(currentView);
           lucide.createIcons();
-          alert(`Imported ${cellCount} availability entries.`);
+          const parts = [`Imported ${cellCount} availability entries.`];
+          if (addedCount) parts.push(`Added ${addedCount} restaurant${addedCount === 1 ? '' : 's'} to shortlist.`);
+          if (unmatchedCount) parts.push(`${unmatchedCount} id${unmatchedCount === 1 ? '' : 's'} did not match any restaurant — those cells were saved but won't display.`);
+          alert(parts.join(' '));
         } catch (err) {
           alert('Failed to import: ' + err.message);
         } finally {
@@ -1012,6 +1071,7 @@
     setView(currentView);
     updateHiddenBar();
     lucide.createIcons();
+    syncSimButton();
   </script>
 </body>
 </html>

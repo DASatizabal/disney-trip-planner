@@ -39,6 +39,17 @@ const App = {
 
     lucide.createIcons();
     this.updateUndoRedo();
+
+    // Cross-tab re-render: sim toggle / availability picks / shortlist edits
+    // made from availability.html or restaurants.html should reflect here.
+    window.addEventListener('storage', e => {
+      if (!e.key) return;
+      if (e.key === 'ddp_planner_sim_picks' ||
+          e.key === 'ddp_planner_availability' ||
+          e.key === 'ddp_planner_shortlist') {
+        Planner.render();
+      }
+    });
   },
 
   // Theme

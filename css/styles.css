@@ -707,6 +707,33 @@ body.light-mode .bg-blob { opacity: 0.08; }
   border: 1px solid rgba(236, 72, 153, 0.25);
 }
 
+/* Simulated pick overlay (toggled from availability.html) */
+.meal-slot-sim {
+  border: 2px dashed rgba(168, 85, 247, 0.55);
+  border-radius: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  background: rgba(168, 85, 247, 0.06);
+  cursor: default;
+}
+.meal-slot-sim:hover {
+  background: rgba(168, 85, 247, 0.1);
+  transform: none;
+}
+.badge-sim {
+  background: rgba(168, 85, 247, 0.22);
+  color: #d8b4fe;
+  border: 1px solid rgba(168, 85, 247, 0.45);
+}
+body.light-mode .meal-slot-sim {
+  border-color: rgba(126, 34, 206, 0.55);
+  background: rgba(168, 85, 247, 0.1);
+}
+body.light-mode .badge-sim {
+  background: rgba(126, 34, 206, 0.18);
+  color: #6b21a8;
+  border-color: rgba(126, 34, 206, 0.4);
+}
+
 /* D1: Notes indicator */
 .note-indicator {
   width: 6px;

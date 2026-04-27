@@ -128,8 +128,8 @@ const Planner = {
     `;
   },
 
-  // Build a time-sorted timeline of meals + events for one day.
-  _buildTimeline(day) {
+  // Build a time-sorted timeline of meals + events (+ sim overlays) for one day.
+  _buildTimeline(day, date) {
     const items = [];
     MEAL_SLOTS.forEach(slot => {
       const sel = day.selections[slot];
@@ -145,18 +145,84 @@ const Planner = {
     (day.events || []).forEach(ev => {
       items.push({ kind: 'event', time: ev.time || '12:00', ev });
     });
+    if (date) {
+      this._getSimEntriesForDay(date, day).forEach(s => items.push(s));
+    }
+    const order = { meal: 0, event: 1, sim: 2 };
     items.sort((a, b) => {
       const t = a.time.localeCompare(b.time);
       if (t !== 0) return t;
-      // Stable tiebreaker: meals before events at same time
-      if (a.kind !== b.kind) return a.kind === 'meal' ? -1 : 1;
-      return 0;
+      return (order[a.kind] || 0) - (order[b.kind] || 0);
     });
     return items;
   },
 
+  // Sim overlays: read shortlist + availability + sim toggle from localStorage.
+  // Returns picked-but-not-booked entries the user has marked on availability.html.
+  _getSimEntriesForDay(date, day) {
+    if (localStorage.getItem('ddp_planner_sim_picks') !== 'on') return [];
+    let avail = {}, shortlistIds = [];
+    try { avail = JSON.parse(localStorage.getItem('ddp_planner_availability') || '{}'); } catch (e) {}
+    try { shortlistIds = JSON.parse(localStorage.getItem('ddp_planner_shortlist') || '[]'); } catch (e) {}
+    if (!shortlistIds.length) return [];
+    const out = [];
+    const seen = new Set();
+    shortlistIds.forEach(id => {
+      const cell = avail[id] && avail[id][date];
+      if (!cell) return;
+      const r = this._lookupRid(id);
+      if (!r) return;
+      String(cell).split(',').map(s => s.trim()).filter(Boolean).forEach(token => {
+        if (!token.startsWith('*')) return;
+        const hhmm = this._normalizeSimTime(token.slice(1).trim());
+        if (!hhmm) return;
+        const dedupKey = id + '|' + hhmm;
+        if (seen.has(dedupKey)) return;
+        seen.add(dedupKey);
+        const alreadyBooked = MEAL_SLOTS.some(slot => {
+          const sel = day.selections[slot];
+          if (!sel || sel.restaurantId !== r.id) return false;
+          const selT = this._normalizeSimTime(sel.time || DEFAULT_MEAL_TIMES[slot]);
+          return selT === hhmm;
+        });
+        if (alreadyBooked) return;
+        out.push({ kind: 'sim', time: hhmm, restaurant: r, rid: id });
+      });
+    });
+    return out;
+  },
+
+  _lookupRid(id) {
+    if (typeof id !== 'string') return null;
+    const merged = RestaurantMerge.getMerged();
+    if (id.startsWith('db:')) {
+      const numId = parseInt(id.slice(3), 10);
+      return merged.find(r => r.id === numId) || null;
+    }
+    if (id.startsWith('csv:')) {
+      const name = id.slice(4);
+      return merged.find(r => r.id == null && r.name === name) || null;
+    }
+    return null;
+  },
+
+  _normalizeSimTime(s) {
+    if (!s) return null;
+    const t = String(s).trim().toLowerCase().replace(/\s+/g, '');
+    const m = t.match(/^(\d{1,2})(?::(\d{2}))?(a|p|am|pm)?$/);
+    if (!m) return null;
+    let h = parseInt(m[1], 10);
+    const mn = parseInt(m[2] || '0', 10);
+    const ampm = m[3] && m[3][0];
+    if (h > 23 || mn > 59) return null;
+    if (ampm === 'a') { if (h === 12) h = 0; }
+    else if (ampm === 'p') { if (h !== 12) h += 12; }
+    else if (h >= 1 && h <= 6) { h += 12; }
+    return `${String(h).padStart(2, '0')}:${String(mn).padStart(2, '0')}`;
+  },
+
   _renderTimeline(td, day) {
-    const items = this._buildTimeline(day);
+    const items = this._buildTimeline(day, td.date);
     const dividerTime = day.splitDividerTime || DEFAULT_SPLIT_DIVIDER_TIME;
     let dividerInserted = false;
 
@@ -168,7 +234,9 @@ const Planner = {
       }
       const itemHtml = item.kind === 'meal'
         ? this._renderTimelineMeal(td, day, item.slot, item.sel)
-        : this._renderTimelineEvent(td.date, item.ev);
+        : item.kind === 'sim'
+          ? this._renderTimelineSim(td, day, item)
+          : this._renderTimelineEvent(td.date, item.ev);
       return prefix + itemHtml;
     }).join('');
 
@@ -303,6 +371,29 @@ const Planner = {
             title="Edit time">
             <i data-lucide="clock" class="w-3 h-3 text-white/40"></i>
           </button>
+        </div>
+      </div>
+    `;
+  },
+
+  _renderTimelineSim(td, day, sim) {
+    const r = sim.restaurant;
+    const time = sim.time;
+    const badgeClass = this._creditBadgeClass(r.creditType);
+    return `
+      <div class="meal-slot meal-slot-sim relative" title="Simulated pick from Availability — not booked">
+        <div class="flex items-start justify-between gap-1">
+          <div class="min-w-0 flex-1">
+            <div class="text-[9px] text-white/30 uppercase tracking-wider mb-0.5">
+              <span class="meal-time">${formatTime12h(time)}</span>SIM PICK
+            </div>
+            <div class="text-xs font-medium truncate">${this._escapeHtml(r.name)}</div>
+            <div class="flex items-center gap-1 mt-0.5 flex-wrap">
+              ${r.creditType ? `<span class="badge ${badgeClass}">${r.creditType}</span>` : ''}
+              <span class="badge badge-sim">SIM</span>
+              ${r.location ? `<span class="text-[9px] text-white/30 truncate">${this._escapeHtml(r.location)}</span>` : ''}
+            </div>
+          </div>
         </div>
       </div>
     `;
