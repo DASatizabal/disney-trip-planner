@@ -191,6 +191,29 @@
       font-weight: 600;
       letter-spacing: 0.02em;
     }
+    .ds-park {
+      display: inline-block;
+      width: 18px;
+      flex-shrink: 0;
+      color: rgba(125,211,252,0.85);
+      font-weight: 700;
+      font-size: 9px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+    .ds-time {
+      flex-shrink: 0;
+      color: rgba(255,255,255,0.55);
+      font-size: 9px;
+      font-variant-numeric: tabular-nums;
+      margin-right: 4px;
+      min-width: 28px;
+    }
+    .ds-events-divider {
+      height: 1px;
+      background: rgba(255,255,255,0.06);
+      margin: 3px 2px;
+    }
     .ds-counts {
       display: flex;
       gap: 6px;
@@ -202,6 +225,9 @@
     body.light-mode .day-summary { border-top-color: rgba(0,0,0,0.08); }
     body.light-mode .ds-slot { color: rgba(0,0,0,0.5); }
     body.light-mode .ds-counts { color: rgba(0,0,0,0.55); }
+    body.light-mode .ds-park { color: #1d4ed8; }
+    body.light-mode .ds-time { color: rgba(0,0,0,0.55); }
+    body.light-mode .ds-events-divider { background: rgba(0,0,0,0.08); }
   </style>
 </head>
 <body class="bg-slate-950 text-white min-h-screen font-sans">
@@ -351,6 +377,21 @@
       if (cleaned.length <= maxLen) return cleaned;
       return cleaned.slice(0, Math.max(1, maxLen - 1)) + '…';
     }
+    function parkLetter(park) {
+      if (!park) return '';
+      if (park === 'Magic Kingdom')      return 'M';
+      if (park === 'EPCOT')              return 'E';
+      if (park === 'Hollywood Studios')  return 'H';
+      if (park === 'Animal Kingdom')     return 'A';
+      if (park === 'Disney Springs')     return 'DS';
+      if (park === 'Resort Day')         return 'R';
+      if (park.indexOf('Typhoon') >= 0)  return 'TL';
+      if (park.indexOf('Blizzard') >= 0) return 'BB';
+      if (park === 'Travel Day')         return 'TD';
+      if (park === 'Split Day')          return 'SP';
+      if (park === 'none')               return '';
+      return park.slice(0, 2).toUpperCase();
+    }
     function summarizeDay(date) {
       const day = activePlan.plan.days && activePlan.plan.days[date];
       if (!day || !day.selections) return null;
@@ -361,20 +402,28 @@
         return r ? r.name : '?';
       };
       const snackCount = ['snack1','snack2','snack3','snack4'].filter(s => day.selections[s]).length;
-      const eventCount = Array.isArray(day.events) ? day.events.length : 0;
+      const events = Array.isArray(day.events) ? day.events.slice() : [];
+      events.sort((a, b) => (a.time || '').localeCompare(b.time || ''));
+      const evRows = events.map(ev => ({
+        name:  ev.name || (ev.kind || 'Event'),
+        time24: ev.time || '',
+        time12: formatTime12h(ev.time),
+        parkCode: parkLetter(parkForTime(day, ev.time) || day.park),
+        kind:  ev.kind || 'other'
+      }));
       return {
         breakfast: meal('breakfast'),
         lunch:     meal('lunch'),
         dinner:    meal('dinner'),
         snacks:    snackCount,
-        events:    eventCount
+        events:    evRows
       };
     }
     function summaryHTML(date, opts = {}) {
       const s = summarizeDay(date);
       if (!s) return `<div class="day-summary" data-date="${date}"></div>`;
       const maxLen = opts.maxLen || 13;
-      const row = (label, name) => {
+      const mealRow = (label, name) => {
         const display = name ? truncateName(name, maxLen) : '—';
         const cls = name ? 'text-white/70' : 'text-white/25';
         const title = name ? esc(name) : '';
@@ -383,14 +432,24 @@
           <span class="${cls} truncate" title="${title}">${esc(display)}</span>
         </div>`;
       };
-      const counts = [];
-      if (s.snacks) counts.push(`<span class="ds-count">🍪 ${s.snacks}</span>`);
-      if (s.events) counts.push(`<span class="ds-count">📌 ${s.events}</span>`);
-      const countLine = counts.length ? `<div class="ds-counts">${counts.join('')}</div>` : '';
+      const eventRows = s.events.map(ev => {
+        const display = truncateName(ev.name, maxLen);
+        const tip = `${ev.parkCode ? ev.parkCode + ' • ' : ''}${ev.time12 || ev.time24 || '?'} — ${ev.name}`;
+        return `<div class="ds-row" title="${attr(tip)}">
+          <span class="ds-park">${esc(ev.parkCode || '')}</span>
+          <span class="ds-time">${esc(ev.time12 || ev.time24 || '')}</span>
+          <span class="text-white/70 truncate">${esc(display)}</span>
+        </div>`;
+      }).join('');
+      const eventsBlock = eventRows ? `<div class="ds-events-divider"></div>${eventRows}` : '';
+      const countLine = s.snacks
+        ? `<div class="ds-counts"><span class="ds-count">🍪 ${s.snacks}</span></div>`
+        : '';
       return `<div class="day-summary" data-date="${date}">
-        ${row('B', s.breakfast)}
-        ${row('L', s.lunch)}
-        ${row('D', s.dinner)}
+        ${mealRow('B', s.breakfast)}
+        ${mealRow('L', s.lunch)}
+        ${mealRow('D', s.dinner)}
+        ${eventsBlock}
         ${countLine}
       </div>`;
     }
