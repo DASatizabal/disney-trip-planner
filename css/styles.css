@@ -147,6 +147,12 @@ body.light-mode .meal-slot-empty {
   padding: 0.5rem 0.75rem;
 }
 
+/* Snack cards — flat list (no time/schedule), tighter than meal cards */
+.snack-card {
+  min-height: 0;
+  padding: 0.375rem 0.625rem;
+}
+
 /* Badge styles */
 .badge {
   display: inline-flex;

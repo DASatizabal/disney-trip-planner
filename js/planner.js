@@ -88,6 +88,8 @@ const Planner = {
 
       ${this._renderTimeline(td, day)}
 
+      ${this._renderSnacksSection(td, day)}
+
       <!-- D1: Day notes — button to expand -->
       <div class="mt-2 pt-2 border-t border-white/5">
         ${day.notes ? `
@@ -135,10 +137,17 @@ const Planner = {
     `;
   },
 
-  // Build a time-sorted timeline of meals + events (+ sim overlays) for one day.
+  _isSnackSlot(slot) {
+    return typeof slot === 'string' && slot.startsWith('snack');
+  },
+
+  // Build a time-sorted timeline of meals + events (+ sim overlays) for one
+  // day. Snacks are excluded — they render in their own section via
+  // _renderSnacksSection (no time, no schedule).
   _buildTimeline(day, date) {
     const items = [];
     MEAL_SLOTS.forEach(slot => {
+      if (this._isSnackSlot(slot)) return;
       const sel = day.selections[slot];
       if (sel) {
         items.push({
@@ -153,7 +162,10 @@ const Planner = {
       items.push({ kind: 'event', time: ev.time || '12:00', ev });
     });
     if (date) {
-      this._getSimEntriesForDay(date, day).forEach(s => items.push(s));
+      this._getSimEntriesForDay(date, day).forEach(s => {
+        if (s.restaurant && s.restaurant.creditCategory === 'sn') return;
+        items.push(s);
+      });
     }
     const order = { meal: 0, event: 1, sim: 2 };
     items.sort((a, b) => {
@@ -300,12 +312,13 @@ const Planner = {
       ? this._renderSplitDivider(td.date, day)
       : '';
 
-    const filledMeals = MEAL_SLOTS.filter(s => day.selections[s]);
-    const emptyMeals = MEAL_SLOTS.filter(s => !day.selections[s]);
+    // Only breakfast/lunch/dinner participate in the timeline; snacks live
+    // in their own section below.
+    const emptyNonSnackMeals = MEAL_SLOTS.filter(s => !this._isSnackSlot(s) && !day.selections[s]);
 
     const addRow = `
       <div class="timeline-add-row">
-        ${emptyMeals.length > 0 ? `
+        ${emptyNonSnackMeals.length > 0 ? `
           <button class="timeline-add-btn" onclick="Planner.openMealSlotPicker('${td.date}')">
             <i data-lucide="plus" class="w-3 h-3"></i> Add meal
           </button>
@@ -319,7 +332,7 @@ const Planner = {
     const emptyDropTargets = `
       <div class="timeline-empty-slots">
         <div class="timeline-empty-slots-label">Drop targets</div>
-        ${emptyMeals.map(s => `
+        ${emptyNonSnackMeals.map(s => `
           <div class="meal-slot meal-slot-empty drop-target-meal flex items-center justify-center gap-1 text-white/30"
                data-date="${td.date}" data-slot="${s}">
             <i data-lucide="plus" class="w-3 h-3"></i>
@@ -463,6 +476,128 @@ const Planner = {
     `;
   },
 
+  // Snacks are not scheduled — render them as a flat list below the
+  // timeline with no time / no schedule semantics. Includes filled snack
+  // slots and any sim picks for SN-credit restaurants on this day.
+  _renderSnacksSection(td, day) {
+    const filled = MEAL_SLOTS.filter(s => this._isSnackSlot(s) && day.selections[s]);
+    const empty = MEAL_SLOTS.filter(s => this._isSnackSlot(s) && !day.selections[s]);
+    const sims = this._getSimEntriesForDay(td.date, day)
+      .filter(s => s.restaurant && s.restaurant.creditCategory === 'sn');
+
+    const filledHtml = filled.map(slot => this._renderSnackCard(td, day, slot, day.selections[slot])).join('');
+    const simHtml = sims.map(sim => this._renderSnackSimCard(td, day, sim)).join('');
+
+    const addBtn = empty.length > 0
+      ? `<button class="timeline-add-btn" onclick="Planner.addSnack('${td.date}')">
+           <i data-lucide="plus" class="w-3 h-3"></i> Add snack
+         </button>`
+      : '';
+
+    const dropTargets = empty.length > 0
+      ? `<div class="timeline-empty-slots">
+           <div class="timeline-empty-slots-label">Drop targets</div>
+           ${empty.map(s => `
+             <div class="meal-slot meal-slot-empty drop-target-meal flex items-center justify-center gap-1 text-white/30"
+                  data-date="${td.date}" data-slot="${s}">
+               <i data-lucide="plus" class="w-3 h-3"></i>
+               <span class="text-[10px]">Snack</span>
+             </div>
+           `).join('')}
+         </div>`
+      : '';
+
+    return `
+      <div class="snacks-section mt-2 pt-2 border-t border-white/5">
+        <div class="text-[10px] text-white/40 uppercase tracking-wider mb-1.5 flex items-center gap-1">
+          <i data-lucide="cookie" class="w-3 h-3 text-amber-400/60"></i>
+          Snacks
+        </div>
+        <div class="space-y-1">
+          ${filledHtml}${simHtml}${addBtn}${dropTargets}
+        </div>
+      </div>
+    `;
+  },
+
+  _renderSnackCard(td, day, slot, sel) {
+    let r = CreditEngine._getRestaurant(sel.restaurantId);
+    if (!r && typeof sel.restaurantId === 'string') {
+      const name = sel.restaurantId.replace(/^_csv_/, '').replace(/_/g, ' ');
+      r = RestaurantMerge.findByName(name);
+    }
+    if (!r) {
+      day.selections[slot] = null;
+      return '';
+    }
+    const badgeClass = this._creditBadgeClass(r.creditType);
+    const payBadge = sel.paymentMethod === 'ddp'
+      ? `<span class="badge badge-pool-${(sel.pool || td.pool).toLowerCase()}">DDP ${sel.pool || td.pool}</span>`
+      : sel.paymentMethod === 'vip'
+        ? '<span class="badge badge-vip">VIP</span>'
+        : sel.paymentMethod === 'ap'
+          ? '<span class="badge badge-vip">AP</span>'
+          : '<span class="badge badge-oop">OOP</span>';
+    return `
+      <div class="meal-slot meal-slot-filled snack-card relative group"
+           draggable="true"
+           data-date="${td.date}" data-slot="${slot}"
+           onclick="Planner.onSlotClick('${td.date}', '${slot}')">
+        <div class="flex items-center justify-between gap-1">
+          <div class="min-w-0 flex-1">
+            <div class="text-xs font-medium truncate">${this._escapeHtml(r.name)}</div>
+            <div class="flex items-center gap-1 mt-0.5 flex-wrap">
+              <span class="badge ${badgeClass}">${r.creditType}</span>
+              ${payBadge}
+              ${r.location ? `<span class="text-[9px] text-white/30 truncate">${this._escapeHtml(r.location)}</span>` : ''}
+            </div>
+          </div>
+          <button draggable="false" onclick="event.stopPropagation(); Planner.clearSlot('${td.date}', '${slot}')"
+            class="p-0.5 opacity-0 group-hover:opacity-100 hover:bg-white/10 rounded transition-opacity flex-shrink-0">
+            <i data-lucide="x" class="w-3 h-3 text-white/40"></i>
+          </button>
+        </div>
+      </div>
+    `;
+  },
+
+  _renderSnackSimCard(td, day, sim) {
+    const r = sim.restaurant;
+    const badgeClass = this._creditBadgeClass(r.creditType);
+    const key = `${td.date}|${sim.rid}|${sim.time}`;
+    const attributedPool = this._simAttribution ? this._simAttribution[key] : null;
+    const poolBadge = attributedPool && attributedPool !== 'oop'
+      ? `<span class="badge badge-pool-${attributedPool.toLowerCase()}" title="Would attribute to Bucket ${attributedPool}">DDP ${attributedPool}</span>`
+      : '';
+    return `
+      <div class="meal-slot meal-slot-sim snack-card relative" title="Simulated snack pick from Availability — not booked">
+        <div class="flex items-center justify-between gap-1">
+          <div class="min-w-0 flex-1">
+            <div class="text-xs font-medium truncate">${this._escapeHtml(r.name)}</div>
+            <div class="flex items-center gap-1 mt-0.5 flex-wrap">
+              ${r.creditType ? `<span class="badge ${badgeClass}">${r.creditType}</span>` : ''}
+              ${poolBadge}
+              <span class="badge badge-sim">SIM</span>
+              ${r.location ? `<span class="text-[9px] text-white/30 truncate">${this._escapeHtml(r.location)}</span>` : ''}
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  },
+
+  addSnack(date) {
+    this._closeAllMenus();
+    const day = this._planState.days[date];
+    if (!day) return;
+    const slot = MEAL_SLOTS.find(s => this._isSnackSlot(s) && !day.selections[s]);
+    if (!slot) {
+      App.toast('All four snack slots are filled', 'info');
+      return;
+    }
+    this.onSlotClick(date, slot);
+  },
+
   _renderTimelineEvent(date, ev) {
     const kind = EVENT_KIND_MAP[ev.kind] || EVENT_KIND_MAP.other;
     const durationLabel = ev.durationMinutes
@@ -500,7 +635,7 @@ const Planner = {
     const day = this._planState.days[date];
     if (!day) return;
     const td = TRIP_DAYS.find(d => d.date === date);
-    const emptyMeals = MEAL_SLOTS.filter(s => !day.selections[s]);
+    const emptyMeals = MEAL_SLOTS.filter(s => !this._isSnackSlot(s) && !day.selections[s]);
     if (emptyMeals.length === 0) {
       App.toast('All meal slots are filled for this day', 'info');
       return;
