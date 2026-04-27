@@ -23,9 +23,6 @@ const App = {
     // C4: Check for shared plan in URL hash
     this._loadFromHash();
 
-    // E5: What's New on version bump
-    this._checkWhatsNew();
-
     // C6: Rewards dollars persistence
     const savedRewards = localStorage.getItem(`${STORAGE_PREFIX}_rewards`) || '806.41';
     const rewardsInput = document.getElementById('rewards-dollars');
@@ -139,7 +136,6 @@ const App = {
     },
     'resolver-modal':   { close: () => Planner.closeResolver() },
     'summary-modal':    { close: () => App.closeSummary() },
-    'whatsnew-modal':   { close: () => App.closeWhatsNew() },
     'day-action-modal': { close: () => Planner.closeDayAction() },
     'confirm-modal':    {
       close: () => document.getElementById('confirm-cancel').click(),
@@ -466,95 +462,6 @@ const App = {
 
   closeSummary() {
     document.getElementById('summary-modal').classList.remove('active');
-  },
-
-  // E5: What's New
-  _releaseNotes: [
-    { version: '1.7.0', date: '2026-04-26', notes: [
-      'Each day is now a single time-sorted timeline. Meals and non-dining events (Lightning Lane, character experiences, fireworks, parades, barber shop, shows) interleave by time',
-      'Add scheduled events with the new "+ Add event" button per day. Events have a time, kind, optional location, duration, and notes',
-      'Park Hop divider on split days is now draggable — drop it between any two items to choose which meals/events count toward the AM vs PM park',
-      'Drag-and-drop restaurant cards across days. Default is move; hold Ctrl/Alt to copy. Breakfast↔breakfast, lunch↔lunch, dinner↔dinner; any snack ↔ any snack',
-      'Edit a meal\'s time by hovering the card and clicking the clock icon',
-      'Import/export icons swapped to match cloud-app convention (upload = export, download = import)'
-    ]},
-    { version: '1.6.1', date: '2026-04-22', notes: [
-      'Snacks no longer multiply by diner count — one snack = one SN credit (and one item of cost), not four'
-    ]},
-    { version: '1.6.0', date: '2026-04-22', notes: [
-      'New Pre-Trip Checklist page — link in the header toolbar (Checklist). Separate localStorage, so Lisa and you each track your own progress from your phones'
-    ]},
-    { version: '1.5.4', date: '2026-04-22', notes: [
-      'Credit math now counts per-diner: a family meal burns one credit per person, not one per selection',
-      'OOP cost math uses actual diner composition (adults vs kids) instead of hardcoded 3+1',
-      'Click the diner badge on any slot to edit who is dining (Adults only / Kids only / All shortcuts)',
-      'New selections default to the whole family; previously-saved selections migrate on first read'
-    ]},
-    { version: '1.5.3', date: '2026-04-22', notes: [
-      'Picker defaults to paired resort on water park days (water parks do not serve most meals)',
-      'Self-heal orphaned meal selections so slots no longer vanish when a restaurant id goes stale'
-    ]},
-    { version: '1.5.2', date: '2026-04-22', notes: [
-      'Park assignments optimized based on crowd calendar'
-    ]},
-    { version: '1.5.0', date: '2026-04-20', notes: [
-      'Resolver modal: swap or remove stranded selections when changing parks',
-      'AP discount as a payment option alongside VIP and DDP',
-      'OOP + Disney Rewards Dollars tracker with committed/net view',
-      'Trip Summary modal with day-by-day overview',
-      'Share link via compressed URL hash (or clipboard fallback)',
-      'Dining events + festival food booths in restaurant database',
-      'Search highlighting in picker, dismissible VIP tips, loading skeletons'
-    ]},
-    { version: '1.2.0', date: '2026-04-20', notes: [
-      'Overdraft prevention with balance vs deficit display',
-      'Modal-based scenario creation (no more browser prompts)',
-      'Import validation with schema checks',
-      'Clone-to-pool mismatch warnings before commit',
-      'Undo history expanded to 50 levels'
-    ]},
-    { version: '1.1.0', date: '2026-04-20', notes: [
-      'Merged restaurant universe: 434 restaurants from CSV + DB',
-      'Shared merge module used by both planner and restaurant list',
-      'Credit type inference for CSV-only entries',
-      'Closed restaurant detection (gray CLOSED badge)',
-      'Space 220 split into separate lunch/dinner entries',
-      'Deduplication of Gaston\'s Tavern and BoardWalk Pizza Window'
-    ]}
-  ],
-
-  _checkWhatsNew() {
-    const lastSeen = localStorage.getItem(`${STORAGE_PREFIX}_last_version`);
-    if (lastSeen !== APP_VERSION) {
-      localStorage.setItem(`${STORAGE_PREFIX}_last_version`, APP_VERSION);
-      if (lastSeen) {
-        // Only show on upgrade, not first visit
-        setTimeout(() => this.showWhatsNew(), 500);
-      }
-    }
-  },
-
-  showWhatsNew() {
-    const modal = document.getElementById('whatsnew-modal');
-    const body = document.getElementById('whatsnew-body');
-
-    body.innerHTML = this._releaseNotes.slice(0, 3).map(r => `
-      <div class="mb-3">
-        <div class="flex items-center gap-2 mb-1">
-          <span class="text-xs font-bold">v${r.version}</span>
-          <span class="text-[10px] text-white/30">${r.date}</span>
-        </div>
-        <ul class="text-[11px] text-white/60 space-y-0.5 ml-3">
-          ${r.notes.map(n => `<li class="list-disc">${n}</li>`).join('')}
-        </ul>
-      </div>
-    `).join('');
-
-    modal.classList.add('active');
-  },
-
-  closeWhatsNew() {
-    document.getElementById('whatsnew-modal').classList.remove('active');
   },
 
   // Toast — supports optional click callback
