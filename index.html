@@ -5,6 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
   <title>Disney DDP Planner</title>
   <meta name="description" content="Disney World Dining Plan credit planner for June 2026">
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
+  <meta name="theme-color" content="#0f172a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="DDP Planner">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <script src="https://cdn.tailwindcss.com"></script>
@@ -101,6 +108,9 @@
         </button>
         <button onclick="App.importPlan()" class="p-1.5 hover:bg-white/10 rounded-lg transition-colors" title="Import JSON">
           <i data-lucide="download" class="w-4 h-4"></i>
+        </button>
+        <button onclick="App.openCloudModal()" class="p-1.5 hover:bg-white/10 rounded-lg transition-colors" title="Cloud sync">
+          <i data-lucide="cloud" class="w-4 h-4 text-sky-400"></i>
         </button>
         <button onclick="App.resetPlan()" class="p-1.5 hover:bg-white/10 rounded-lg transition-colors" title="Reset plan">
           <i data-lucide="rotate-ccw" class="w-4 h-4 text-white/40"></i>
@@ -530,6 +540,79 @@
     </div>
   </div>
 
+  <!-- Cloud Sync Modal -->
+  <div class="modal-backdrop" id="cloud-modal">
+    <div class="modal-content" style="max-width:480px;">
+      <div class="sticky top-0 z-10 p-3 border-b border-white/10 flex items-center justify-between" style="background:inherit; border-radius: 1rem 1rem 0 0;">
+        <h2 class="text-base font-bold flex items-center gap-2">
+          <i data-lucide="cloud" class="w-4 h-4 text-sky-400"></i>
+          Cloud Sync
+        </h2>
+        <button onclick="App.closeCloudModal()" class="p-1 hover:bg-white/10 rounded-lg">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+      <div class="p-4 space-y-4">
+
+        <!-- Token section -->
+        <div>
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="text-xs font-semibold uppercase tracking-wide text-white/60">GitHub Token</h3>
+            <span id="cloud-token-status" class="text-[10px] text-white/40"></span>
+          </div>
+          <p class="text-[11px] text-white/50 mb-2">
+            Needed only to <em>push</em>. Generate at
+            <a href="https://github.com/settings/tokens/new?scopes=gist&description=DDP%20Planner%20sync"
+               target="_blank" rel="noopener" class="text-sky-300 hover:underline">github.com/settings/tokens</a>
+            with the <code class="text-amber-300">gist</code> scope only.
+          </p>
+          <div class="flex gap-2">
+            <input type="password" id="cloud-token-input" placeholder="ghp_..."
+              class="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-xs font-mono focus:outline-none focus:border-white/30">
+            <button onclick="App.saveCloudToken()" class="px-3 py-2 text-xs rounded-lg bg-blue-500/80 hover:bg-blue-500 text-white font-medium transition-colors">Save</button>
+            <button onclick="App.clearCloudToken()" class="px-3 py-2 text-xs rounded-lg bg-white/5 hover:bg-white/10 transition-colors" title="Forget token">Clear</button>
+          </div>
+        </div>
+
+        <!-- Push section -->
+        <div class="border-t border-white/10 pt-4">
+          <h3 class="text-xs font-semibold uppercase tracking-wide text-white/60 mb-2">Push this scenario</h3>
+          <p class="text-[11px] text-white/50 mb-2">
+            Uploads the current scenario to a secret GitHub Gist and gives you a sync code to paste on another device.
+          </p>
+          <button onclick="App.cloudPush()" id="cloud-push-btn" class="w-full px-3 py-2 text-xs rounded-lg bg-emerald-500/80 hover:bg-emerald-500 text-white font-medium transition-colors flex items-center justify-center gap-2">
+            <i data-lucide="cloud-upload" class="w-4 h-4"></i>
+            <span>Push current scenario</span>
+          </button>
+          <div id="cloud-push-result" class="hidden mt-3 p-2 rounded-lg bg-white/5 border border-white/10">
+            <div class="text-[10px] text-white/50 mb-1">Sync code (tap to copy)</div>
+            <button onclick="App.copyCloudCode()" id="cloud-code-display"
+              class="w-full text-left font-mono text-[11px] break-all px-2 py-1.5 bg-black/30 hover:bg-black/40 rounded transition-colors"></button>
+            <div id="cloud-pushed-at" class="text-[10px] text-white/40 mt-1"></div>
+          </div>
+        </div>
+
+        <!-- Pull section -->
+        <div class="border-t border-white/10 pt-4">
+          <h3 class="text-xs font-semibold uppercase tracking-wide text-white/60 mb-2">Pull from cloud</h3>
+          <p class="text-[11px] text-white/50 mb-2">
+            Replaces the current scenario with the plan stored at this sync code. No token needed.
+          </p>
+          <div class="flex gap-2">
+            <input type="text" id="cloud-pull-input" placeholder="Paste sync code"
+              class="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-xs font-mono focus:outline-none focus:border-white/30">
+            <button onclick="App.cloudPull()" class="px-3 py-2 text-xs rounded-lg bg-sky-500/80 hover:bg-sky-500 text-white font-medium transition-colors flex items-center gap-2">
+              <i data-lucide="cloud-download" class="w-4 h-4"></i>
+              <span>Pull</span>
+            </button>
+          </div>
+        </div>
+
+        <div id="cloud-error" class="hidden p-2 rounded-lg bg-red-500/10 border border-red-500/30 text-[11px] text-red-300"></div>
+      </div>
+    </div>
+  </div>
+
   <!-- Hidden file input for import -->
   <input type="file" id="import-file" accept=".json" style="display:none" onchange="App.handleImport(event)">
 
@@ -543,6 +626,7 @@
   <script src="js/csv-restaurants.js"></script>
   <script src="js/restaurant-merge.js"></script>
   <script src="js/storage.js"></script>
+  <script src="js/cloud-sync.js"></script>
   <script src="js/credit-engine.js"></script>
   <script src="js/history.js"></script>
   <script src="js/scenarios.js"></script>

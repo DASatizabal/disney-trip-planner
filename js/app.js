@@ -145,7 +145,8 @@ const App = {
     'input-modal':      {
       close: () => document.getElementById('input-modal-cancel').click(),
       isGuarded: () => document.getElementById('input-modal-field').value.trim().length > 0
-    }
+    },
+    'cloud-modal':      { close: () => App.closeCloudModal() }
   },
 
   _lastEscapeTs: 0,
@@ -463,6 +464,131 @@ const App = {
 
   closeSummary() {
     document.getElementById('summary-modal').classList.remove('active');
+  },
+
+  // ----- Cloud sync (Gist-backed) -----
+  openCloudModal() {
+    document.getElementById('cloud-token-input').value = '';
+    document.getElementById('cloud-pull-input').value = '';
+    this._renderCloudState();
+    this._hideCloudError();
+    document.getElementById('cloud-modal').classList.add('active');
+    lucide.createIcons();
+  },
+
+  closeCloudModal() {
+    document.getElementById('cloud-modal').classList.remove('active');
+  },
+
+  _renderCloudState() {
+    const scen = Scenarios.getCurrent();
+    const tokenStatus = document.getElementById('cloud-token-status');
+    if (Cloud.hasToken()) {
+      tokenStatus.textContent = 'Token saved on this device';
+      tokenStatus.className = 'text-[10px] text-emerald-300';
+    } else {
+      tokenStatus.textContent = 'No token saved';
+      tokenStatus.className = 'text-[10px] text-white/40';
+    }
+
+    const gistId = Cloud.getGistId(scen);
+    const pushedAt = Cloud.getLastPushed(scen);
+    const resultBox = document.getElementById('cloud-push-result');
+    if (gistId) {
+      document.getElementById('cloud-code-display').textContent = gistId;
+      document.getElementById('cloud-pushed-at').textContent =
+        pushedAt ? `Last push: ${new Date(pushedAt).toLocaleString()}` : '';
+      resultBox.classList.remove('hidden');
+    } else {
+      resultBox.classList.add('hidden');
+    }
+  },
+
+  _showCloudError(msg) {
+    const el = document.getElementById('cloud-error');
+    el.textContent = msg;
+    el.classList.remove('hidden');
+  },
+
+  _hideCloudError() {
+    document.getElementById('cloud-error').classList.add('hidden');
+  },
+
+  saveCloudToken() {
+    const val = document.getElementById('cloud-token-input').value.trim();
+    if (!val) { this._showCloudError('Paste a token first.'); return; }
+    Cloud.setToken(val);
+    document.getElementById('cloud-token-input').value = '';
+    this._hideCloudError();
+    this._renderCloudState();
+    this.toast('Token saved on this device', 'success');
+  },
+
+  clearCloudToken() {
+    Cloud.clearToken();
+    this._renderCloudState();
+    this.toast('Token cleared', 'info');
+  },
+
+  async cloudPush() {
+    this._hideCloudError();
+    if (!Cloud.hasToken()) {
+      this._showCloudError('Save a GitHub token first (gist scope).');
+      return;
+    }
+    const btn = document.getElementById('cloud-push-btn');
+    const label = btn.querySelector('span');
+    const original = label.textContent;
+    btn.disabled = true;
+    label.textContent = 'Pushing…';
+    try {
+      const scen = Scenarios.getCurrent();
+      const plan = Planner.getState();
+      const { id } = await Cloud.push(scen, plan);
+      this._renderCloudState();
+      this.toast('Pushed to cloud', 'success');
+      // Pre-fill pull input on this device for convenience
+      document.getElementById('cloud-pull-input').value = id;
+    } catch (err) {
+      this._showCloudError(err.message);
+    } finally {
+      btn.disabled = false;
+      label.textContent = original;
+    }
+  },
+
+  async cloudPull() {
+    this._hideCloudError();
+    const code = document.getElementById('cloud-pull-input').value.trim();
+    if (!code) { this._showCloudError('Enter a sync code first.'); return; }
+
+    try {
+      const { plan, gistId } = await Cloud.pull(code);
+      this.confirm('Pull from Cloud', 'This replaces the current scenario with the cloud copy. Continue?', () => {
+        History.push(Planner.getState());
+        Planner.loadState(plan);
+        Scenarios.save(plan);
+        Cloud.setGistId(Scenarios.getCurrent(), gistId);
+        Planner.render();
+        this.updateUndoRedo();
+        this._renderCloudState();
+        this.toast('Pulled from cloud', 'success');
+        this.closeCloudModal();
+      }, true, 'Replace', 'Cancel');
+    } catch (err) {
+      this._showCloudError(err.message);
+    }
+  },
+
+  async copyCloudCode() {
+    const code = document.getElementById('cloud-code-display').textContent.trim();
+    if (!code) return;
+    try {
+      await navigator.clipboard.writeText(code);
+      this.toast('Sync code copied', 'success');
+    } catch (e) {
+      this.toast('Copy failed — long-press to copy manually', 'warning');
+    }
   },
 
   // Toast — supports optional click callback
