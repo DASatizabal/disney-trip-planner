@@ -220,7 +220,7 @@ body.light-mode .meal-slot-empty {
     max-width: 100%;
   }
 
-  .credit-dashboard-full { display: none; }
+  .credit-dashboard-full { display: none !important; }
   .credit-dashboard-compact { display: flex !important; }
 }
 
