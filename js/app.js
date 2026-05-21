@@ -564,6 +564,8 @@ const App = {
 
     try {
       const { plan, gistId } = await Cloud.pull(code);
+      // Close the cloud modal first so the confirm dialog isn't hidden behind it.
+      this.closeCloudModal();
       this.confirm('Pull from Cloud', 'This replaces the current scenario with the cloud copy. Continue?', () => {
         History.push(Planner.getState());
         Planner.loadState(plan);
@@ -571,9 +573,7 @@ const App = {
         Cloud.setGistId(Scenarios.getCurrent(), gistId);
         Planner.render();
         this.updateUndoRedo();
-        this._renderCloudState();
         this.toast('Pulled from cloud', 'success');
-        this.closeCloudModal();
       }, true, 'Replace', 'Cancel');
     } catch (err) {
       this._showCloudError(err.message);
