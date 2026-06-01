@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Today — Disney DDP Planner</title>
+  <meta name="description" content="Today's Disney plan as a checklist">
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
+  <meta name="theme-color" content="#0f172a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="DDP Planner">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = { theme: { extend: { fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] } } } };
+  </script>
+  <link rel="stylesheet" href="css/styles.css">
+  <style>
+    /* Checklist rows */
+    .check-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.75rem;
+      padding: 0.75rem;
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 0.85rem;
+      background: rgba(255,255,255,0.04);
+      cursor: pointer;
+      transition: background 0.15s ease, opacity 0.2s ease, border-color 0.15s ease, transform 0.1s ease;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .check-row:hover { background: rgba(255,255,255,0.07); }
+    .check-row:active { transform: scale(0.99); }
+    body.light-mode .check-row { border-color: rgba(0,0,0,0.08); background: rgba(0,0,0,0.02); }
+    body.light-mode .check-row:hover { background: rgba(0,0,0,0.04); }
+
+    /* The tick box */
+    .check-box {
+      flex-shrink: 0;
+      width: 26px; height: 26px;
+      border-radius: 8px;
+      border: 2px solid rgba(255,255,255,0.25);
+      display: flex; align-items: center; justify-content: center;
+      margin-top: 1px;
+      transition: all 0.15s ease;
+      color: transparent;
+    }
+    body.light-mode .check-box { border-color: rgba(0,0,0,0.2); }
+
+    /* Completed: crossed out + grayed + filled box */
+    .check-row.done { opacity: 0.45; }
+    .check-row.done .row-title { text-decoration: line-through; }
+    .check-row.done .row-type { text-decoration: line-through; }
+    .check-row.done .check-box {
+      background: #22c55e; border-color: #22c55e; color: #052e16;
+    }
+
+    /* Past (>5 min ago) but not completed: grayed, NOT crossed */
+    .check-row.past:not(.done) { opacity: 0.5; }
+    .check-row.past:not(.done) .check-box { border-style: dashed; }
+
+    /* The next thing coming up (only on the live current day) */
+    .check-row.next-up {
+      border-color: rgba(59,130,246,0.6);
+      box-shadow: 0 0 0 1px rgba(59,130,246,0.35), 0 4px 18px rgba(59,130,246,0.18);
+      background: rgba(59,130,246,0.08);
+    }
+
+    .row-time {
+      flex-shrink: 0;
+      width: 58px;
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+      font-weight: 700;
+      font-size: 0.8rem;
+      line-height: 1.55;
+      color: rgba(255,255,255,0.85);
+    }
+    body.light-mode .row-time { color: rgba(30,41,59,0.9); }
+
+    .row-type {
+      font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.06em;
+      color: rgba(255,255,255,0.45); font-weight: 600;
+      display: inline-flex; align-items: center; gap: 4px;
+    }
+    body.light-mode .row-type { color: rgba(30,41,59,0.55); }
+    .row-title { font-size: 0.95rem; font-weight: 600; line-height: 1.25; }
+    .row-sub { font-size: 0.7rem; color: rgba(255,255,255,0.45); margin-top: 2px; }
+    body.light-mode .row-sub { color: rgba(30,41,59,0.55); }
+
+    .day-pill {
+      flex-shrink: 0;
+      padding: 0.35rem 0.65rem;
+      border-radius: 9999px;
+      font-size: 0.7rem; font-weight: 600;
+      border: 1px solid rgba(255,255,255,0.12);
+      background: rgba(255,255,255,0.04);
+      cursor: pointer; white-space: nowrap;
+      transition: all 0.15s ease;
+    }
+    .day-pill.active { background: white; color: #0f172a; border-color: white; }
+    body.light-mode .day-pill { border-color: rgba(0,0,0,0.12); }
+    body.light-mode .day-pill.active { background: #1e293b; color: white; }
+
+    .pill-strip { display: flex; gap: 0.4rem; overflow-x: auto; padding-bottom: 4px; -webkit-overflow-scrolling: touch; }
+    .pill-strip::-webkit-scrollbar { height: 0; }
+
+    .progress-track { height: 6px; border-radius: 3px; background: rgba(255,255,255,0.1); overflow: hidden; }
+    body.light-mode .progress-track { background: rgba(0,0,0,0.08); }
+    .progress-fill { height: 100%; background: #22c55e; transition: width 0.3s ease; }
+  </style>
+</head>
+<body class="bg-slate-950 text-white min-h-screen font-sans">
+
+  <!-- Background blobs -->
+  <div class="bg-blob" style="width:600px;height:600px;top:-200px;left:-100px;background:#3b82f6;"></div>
+  <div class="bg-blob" style="width:500px;height:500px;bottom:-150px;right:-100px;background:#22c55e;"></div>
+
+  <!-- Top Bar -->
+  <header class="sticky top-0 z-30 glass-card-darker border-b border-white/10" style="border-radius:0;">
+    <div class="max-w-2xl mx-auto px-3 py-2 flex items-center gap-2">
+      <a href="index.html" class="p-1.5 hover:bg-white/10 rounded-lg transition-colors flex items-center gap-1.5 mr-auto" title="Back to planner">
+        <i data-lucide="chevron-left" class="w-4 h-4"></i>
+        <span class="text-sm font-bold">Today</span>
+      </a>
+      <a href="overview.html" class="p-1.5 hover:bg-white/10 rounded-lg transition-colors flex items-center gap-1" title="Trip overview">
+        <i data-lucide="layout-grid" class="w-4 h-4 text-amber-400"></i>
+        <span class="text-xs hidden sm:inline">Overview</span>
+      </a>
+      <button onclick="Today.toggleTheme()" class="p-1.5 hover:bg-white/10 rounded-lg transition-colors" title="Toggle theme">
+        <i data-lucide="moon" class="w-4 h-4" id="theme-icon"></i>
+      </button>
+    </div>
+  </header>
+
+  <main class="max-w-2xl mx-auto px-3 pt-3 pb-10">
+
+    <!-- Date header -->
+    <section class="glass-card p-4 mb-3">
+      <div class="flex items-center gap-3">
+        <button onclick="Today.shiftDay(-1)" class="p-2 hover:bg-white/10 rounded-lg transition-colors disabled:opacity-25" id="prev-day" title="Previous day">
+          <i data-lucide="chevron-left" class="w-5 h-5"></i>
+        </button>
+        <div class="flex-1 text-center">
+          <div class="text-[11px] uppercase tracking-widest text-white/40" id="date-eyebrow"></div>
+          <div class="text-2xl font-extrabold leading-tight" id="date-weekday"></div>
+          <div class="text-sm text-white/50" id="date-full"></div>
+          <div class="flex items-center justify-center gap-2 mt-2 flex-wrap" id="date-badges"></div>
+        </div>
+        <button onclick="Today.shiftDay(1)" class="p-2 hover:bg-white/10 rounded-lg transition-colors disabled:opacity-25" id="next-day" title="Next day">
+          <i data-lucide="chevron-right" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <!-- Progress -->
+      <div class="mt-3">
+        <div class="flex justify-between text-[11px] text-white/50 mb-1">
+          <span id="progress-label">0 of 0 done</span>
+          <button onclick="Today.resetDay()" class="hover:text-white/80 transition-colors flex items-center gap-1" title="Uncheck everything today">
+            <i data-lucide="rotate-ccw" class="w-3 h-3"></i> Reset
+          </button>
+        </div>
+        <div class="progress-track"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
+      </div>
+    </section>
+
+    <!-- Day jump pills -->
+    <div class="pill-strip mb-3" id="pill-strip"></div>
+
+    <!-- Notes / context -->
+    <details class="glass-card mb-3" id="notes-card" style="display:none">
+      <summary class="p-3 cursor-pointer text-xs font-medium flex items-center gap-2 select-none text-white/70">
+        <i data-lucide="info" class="w-3.5 h-3.5 text-amber-400"></i>
+        Day notes
+      </summary>
+      <div class="px-3 pb-3 text-xs text-white/60" id="notes-body"></div>
+    </details>
+
+    <!-- Checklist -->
+    <section class="space-y-2" id="checklist"></section>
+
+    <!-- Empty state -->
+    <div class="text-center text-white/40 text-sm py-10" id="empty-state" style="display:none">
+      <i data-lucide="calendar-x" class="w-8 h-8 mx-auto mb-2 opacity-50"></i>
+      <p>Nothing planned for this day yet.</p>
+      <a href="index.html" class="text-sky-300 hover:underline text-xs">Add meals &amp; events in the planner →</a>
+    </div>
+
+    <p class="text-center text-[10px] text-white/25 mt-6">
+      Tap a row to mark it done. Items more than 5 min past gray out automatically.
+    </p>
+  </main>
+
+  <div class="toast-container" id="toast-container"></div>
+
+  <!-- Scripts: data + config only, no planner UI -->
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+  <script src="js/config.js"></script>
+  <script src="js/restaurant-db.js"></script>
+  <script src="js/csv-restaurants.js"></script>
+  <script src="js/restaurant-merge.js"></script>
+  <script src="js/storage.js"></script>
+  <script src="js/credit-engine.js"></script>
+  <script src="js/agenda.js"></script>
+  <script>
+    const Today = {
+      date: null,
+      plan: null,
+      _timer: null,
+
+      init() {
+        if (Storage.loadTheme() === 'light') {
+          document.body.classList.add('light-mode');
+          this._setThemeIcon('light');
+        }
+        this.plan = Agenda.loadPlan();
+        this.date = Agenda.defaultDate();
+        this.renderPills();
+        this.render();
+        // Re-evaluate "past" / "next up" as the clock moves.
+        this._timer = setInterval(() => this.render(), 30000);
+        // Reflect edits made in another tab (planner / scenario switch).
+        window.addEventListener('storage', () => {
+          this.plan = Agenda.loadPlan();
+          this.renderPills();
+          this.render();
+        });
+        lucide.createIcons();
+      },
+
+      _setThemeIcon(theme) {
+        const icon = document.getElementById('theme-icon');
+        icon.setAttribute('data-lucide', theme === 'light' ? 'sun' : 'moon');
+      },
+
+      toggleTheme() {
+        const isLight = document.body.classList.toggle('light-mode');
+        Storage.saveTheme(isLight ? 'light' : 'dark');
+        this._setThemeIcon(isLight ? 'light' : 'dark');
+        lucide.createIcons();
+      },
+
+      shiftDay(delta) {
+        const dates = TRIP_DAYS.map(td => td.date);
+        const i = dates.indexOf(this.date);
+        const next = i + delta;
+        if (next < 0 || next >= dates.length) return;
+        this.date = dates[next];
+        this.render();
+        this.renderPills();
+      },
+
+      goTo(date) {
+        this.date = date;
+        this.render();
+        this.renderPills();
+      },
+
+      renderPills() {
+        const strip = document.getElementById('pill-strip');
+        const today = Agenda.localDateStr();
+        strip.innerHTML = TRIP_DAYS.map(td => {
+          const d = new Date(td.date + 'T12:00:00');
+          const lbl = d.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric' });
+          const isToday = td.date === today;
+          return `<button class="day-pill ${td.date === this.date ? 'active' : ''}"
+            onclick="Today.goTo('${td.date}')">${lbl}${isToday ? ' •' : ''}</button>`;
+        }).join('');
+        // keep the active pill in view
+        const active = strip.querySelector('.day-pill.active');
+        if (active) active.scrollIntoView({ inline: 'center', block: 'nearest' });
+      },
+
+      render() {
+        const td = Agenda.tripDay(this.date);
+        const day = this.plan.days[this.date];
+        const dObj = new Date(this.date + 'T12:00:00');
+        const isLiveToday = this.date === Agenda.localDateStr();
+
+        // Header
+        document.getElementById('date-eyebrow').textContent = isLiveToday ? 'Today' : 'Plan for';
+        document.getElementById('date-weekday').textContent = dObj.toLocaleDateString('en-US', { weekday: 'long' });
+        document.getElementById('date-full').textContent = dObj.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+
+        const badges = [];
+        if (td) {
+          badges.push(`<span class="badge badge-pool-${td.pool.toLowerCase()}">Bucket ${td.pool}</span>`);
+          if (day && day.park) badges.push(`<span class="text-xs text-white/60">${Agenda.escapeHtml(day.park)}</span>`);
+          if (td.vip) badges.push(`<span class="badge badge-vip">VIP</span>`);
+          if (td.isCheckin) badges.push(`<span class="badge badge-checkin">Check-in</span>`);
+          if (td.isCheckout) badges.push(`<span class="badge badge-checkout">Check-out</span>`);
+        }
+        document.getElementById('date-badges').innerHTML = badges.join('');
+
+        // Nav button enable/disable
+        const dates = TRIP_DAYS.map(x => x.date);
+        const i = dates.indexOf(this.date);
+        document.getElementById('prev-day').disabled = i <= 0;
+        document.getElementById('next-day').disabled = i >= dates.length - 1;
+
+        // Notes
+        const notesCard = document.getElementById('notes-card');
+        const noteText = (day && day.notes) || (td && td.notes) || '';
+        if (noteText) {
+          document.getElementById('notes-body').textContent = noteText;
+          notesCard.style.display = '';
+        } else {
+          notesCard.style.display = 'none';
+        }
+
+        // Timeline
+        const items = day ? Agenda.buildTimeline(this.date, day) : [];
+        const done = Agenda.loadDone();
+        const list = document.getElementById('checklist');
+        const empty = document.getElementById('empty-state');
+
+        if (!items.length) {
+          list.innerHTML = '';
+          empty.style.display = '';
+        } else {
+          empty.style.display = 'none';
+          // "Next up" = first not-done, not-past item, only when viewing the live day.
+          let nextKey = null;
+          if (isLiveToday) {
+            const cand = items.find(it => !done[it.key] && !Agenda.isPast(this.date, it.time));
+            if (cand) nextKey = cand.key;
+          }
+          list.innerHTML = items.map(it => this.rowHtml(it, done, nextKey)).join('');
+        }
+
+        // Progress
+        const total = items.length;
+        const doneCount = items.filter(it => done[it.key]).length;
+        document.getElementById('progress-label').textContent = `${doneCount} of ${total} done`;
+        document.getElementById('progress-fill').style.width = total ? `${Math.round(doneCount / total * 100)}%` : '0%';
+
+        lucide.createIcons();
+      },
+
+      rowHtml(it, done, nextKey) {
+        const isDone = !!done[it.key];
+        const isPast = Agenda.isPast(this.date, it.time);
+        const cls = ['check-row'];
+        if (isDone) cls.push('done');
+        if (isPast) cls.push('past');
+        if (it.key === nextKey) cls.push('next-up');
+
+        const sub = [];
+        if (it.location) sub.push(Agenda.escapeHtml(it.location));
+        if (it.kind === 'event' && it.duration) sub.push(`${it.duration} min`);
+        if (it.kind === 'event' && it.notes) sub.push(Agenda.escapeHtml(it.notes));
+
+        const badgeHtml = it.badge
+          ? `<span class="badge ${it.badgeClass} text-[8px]">${Agenda.escapeHtml(it.badge)}</span>` : '';
+        const adrHtml = it.adr
+          ? `<span class="text-[9px] text-green-400/70 font-mono">#${Agenda.escapeHtml(it.adr)}</span>` : '';
+        const nextPill = it.key === nextKey
+          ? `<span class="badge badge-pool-a text-[8px]">Next</span>` : '';
+
+        return `<div class="${cls.join(' ')}" onclick="Today.toggle('${it.key}')">
+          <div class="row-time">${it.timeLabel || '--'}</div>
+          <div class="check-box"><i data-lucide="check" class="w-4 h-4" style="stroke-width:3"></i></div>
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="row-type"><i data-lucide="${it.icon}" class="w-3 h-3"></i>${Agenda.escapeHtml(it.typeLabel)}</span>
+              ${badgeHtml}${adrHtml}${nextPill}
+            </div>
+            <div class="row-title">${Agenda.escapeHtml(it.title)}</div>
+            ${sub.length ? `<div class="row-sub">${sub.join(' · ')}</div>` : ''}
+          </div>
+        </div>`;
+      },
+
+      toggle(key) {
+        Agenda.toggleDone(key);
+        this.render();
+      },
+
+      resetDay() {
+        Agenda.clearDoneForDate(this.date);
+        this.render();
+        this.toast('Day reset', 'info');
+      },
+
+      toast(message, type = 'info') {
+        const c = document.getElementById('toast-container');
+        const t = document.createElement('div');
+        t.className = `toast toast-${type}`;
+        t.textContent = message;
+        c.appendChild(t);
+        setTimeout(() => { t.style.opacity = '0'; t.style.transition = 'opacity 0.3s'; setTimeout(() => t.remove(), 300); }, 2000);
+      }
+    };
+
+    document.addEventListener('DOMContentLoaded', () => Today.init());
+  </script>
+</body>
+</html>

@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Trip Overview — Disney DDP Planner</title>
+  <meta name="description" content="Whole-trip at-a-glance summary">
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
+  <meta name="theme-color" content="#0f172a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="DDP Planner">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = { theme: { extend: { fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] } } } };
+  </script>
+  <link rel="stylesheet" href="css/styles.css">
+  <style>
+    .ov-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0.5rem;
+    }
+    @media (min-width: 640px)  { .ov-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.65rem; } }
+    @media (min-width: 900px)  { .ov-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+
+    .ov-card {
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 0.85rem;
+      background: rgba(255,255,255,0.04);
+      padding: 0.55rem 0.6rem 0.6rem;
+      display: flex; flex-direction: column;
+      border-top: 3px solid var(--accent, rgba(255,255,255,0.2));
+    }
+    body.light-mode .ov-card { border-color: rgba(0,0,0,0.08); background: rgba(0,0,0,0.02); }
+    .ov-card.pool-a { --accent: var(--pool-a); }
+    .ov-card.pool-b { --accent: var(--pool-b); }
+
+    .ov-date { font-size: 0.95rem; font-weight: 800; line-height: 1; }
+    .ov-dow  { font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.08em; color: rgba(255,255,255,0.45); }
+    body.light-mode .ov-dow { color: rgba(30,41,59,0.55); }
+    .ov-park { font-size: 0.65rem; color: rgba(255,255,255,0.6); margin-top: 1px; line-height: 1.2; }
+    body.light-mode .ov-park { color: rgba(30,41,59,0.65); }
+
+    .ov-item {
+      display: flex; align-items: baseline; gap: 0.35rem;
+      font-size: 0.68rem; line-height: 1.35; padding: 1px 0;
+    }
+    .ov-item .t { flex-shrink: 0; width: 42px; font-variant-numeric: tabular-nums; font-weight: 600; color: rgba(255,255,255,0.5); }
+    body.light-mode .ov-item .t { color: rgba(30,41,59,0.55); }
+    .ov-item .n { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .ov-item.is-event .n { color: #fcd34d; }
+    body.light-mode .ov-item.is-event .n { color: #b45309; }
+    .ov-item.done { opacity: 0.4; }
+    .ov-item.done .n { text-decoration: line-through; }
+    .ov-empty { font-size: 0.65rem; color: rgba(255,255,255,0.3); font-style: italic; padding: 2px 0; }
+
+    .ov-note { font-size: 0.6rem; color: rgba(255,255,255,0.4); margin-top: 0.4rem; line-height: 1.3; border-top: 1px dashed rgba(255,255,255,0.08); padding-top: 0.35rem; }
+    body.light-mode .ov-note { color: rgba(30,41,59,0.5); border-color: rgba(0,0,0,0.1); }
+
+    .seg-btn {
+      padding: 0.3rem 0.7rem; font-size: 0.7rem; font-weight: 600;
+      border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.04);
+      cursor: pointer; transition: all 0.15s ease;
+    }
+    .seg-btn:first-child { border-radius: 0.5rem 0 0 0.5rem; }
+    .seg-btn:last-child { border-radius: 0 0.5rem 0.5rem 0; border-left: none; }
+    .seg-btn.active { background: white; color: #0f172a; }
+    body.light-mode .seg-btn { border-color: rgba(0,0,0,0.12); }
+    body.light-mode .seg-btn.active { background: #1e293b; color: white; }
+  </style>
+</head>
+<body class="bg-slate-950 text-white min-h-screen font-sans">
+
+  <div class="bg-blob" style="width:600px;height:600px;top:-200px;left:-100px;background:#3b82f6;"></div>
+  <div class="bg-blob" style="width:500px;height:500px;bottom:-150px;right:-100px;background:#22c55e;"></div>
+
+  <header class="sticky top-0 z-30 glass-card-darker border-b border-white/10" style="border-radius:0;">
+    <div class="max-w-5xl mx-auto px-3 py-2 flex items-center gap-2">
+      <a href="index.html" class="p-1.5 hover:bg-white/10 rounded-lg transition-colors flex items-center gap-1.5 mr-auto" title="Back to planner">
+        <i data-lucide="chevron-left" class="w-4 h-4"></i>
+        <span class="text-sm font-bold">Trip Overview</span>
+      </a>
+      <a href="today.html" class="p-1.5 hover:bg-white/10 rounded-lg transition-colors flex items-center gap-1" title="Today's checklist">
+        <i data-lucide="calendar-check" class="w-4 h-4 text-amber-400"></i>
+        <span class="text-xs hidden sm:inline">Today</span>
+      </a>
+      <button onclick="Overview.copyText()" class="p-1.5 hover:bg-white/10 rounded-lg transition-colors flex items-center gap-1" title="Copy itinerary as text">
+        <i data-lucide="copy" class="w-4 h-4 text-sky-400"></i>
+        <span class="text-xs hidden sm:inline">Copy</span>
+      </button>
+      <button onclick="Overview.toggleTheme()" class="p-1.5 hover:bg-white/10 rounded-lg transition-colors" title="Toggle theme">
+        <i data-lucide="moon" class="w-4 h-4" id="theme-icon"></i>
+      </button>
+    </div>
+  </header>
+
+  <main class="max-w-5xl mx-auto px-3 pt-3 pb-10">
+
+    <!-- Title + filter -->
+    <div class="flex items-center justify-between gap-3 mb-3 flex-wrap">
+      <div>
+        <h1 class="text-lg font-extrabold leading-tight">Satizabal Family · Disney 2026</h1>
+        <p class="text-xs text-white/45" id="trip-range"></p>
+      </div>
+      <div class="flex items-center" role="group" aria-label="Filter items">
+        <button class="seg-btn active" id="seg-all"    onclick="Overview.setFilter('all')">All</button>
+        <button class="seg-btn"        id="seg-meals"  onclick="Overview.setFilter('meals')">Meals</button>
+        <button class="seg-btn"        id="seg-events" onclick="Overview.setFilter('events')">Events</button>
+      </div>
+    </div>
+
+    <!-- Day grid -->
+    <div class="ov-grid" id="ov-grid"></div>
+
+    <p class="text-center text-[10px] text-white/25 mt-5">
+      Screenshot this page to share the plan · checked-off items show struck through
+    </p>
+  </main>
+
+  <div class="toast-container" id="toast-container"></div>
+
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+  <script src="js/config.js"></script>
+  <script src="js/restaurant-db.js"></script>
+  <script src="js/csv-restaurants.js"></script>
+  <script src="js/restaurant-merge.js"></script>
+  <script src="js/storage.js"></script>
+  <script src="js/credit-engine.js"></script>
+  <script src="js/agenda.js"></script>
+  <script>
+    const Overview = {
+      plan: null,
+      filter: 'all',
+
+      init() {
+        if (Storage.loadTheme() === 'light') {
+          document.body.classList.add('light-mode');
+          this._setThemeIcon('light');
+        }
+        this.plan = Agenda.loadPlan();
+        this.renderRange();
+        this.render();
+        window.addEventListener('storage', () => { this.plan = Agenda.loadPlan(); this.render(); });
+        lucide.createIcons();
+      },
+
+      _setThemeIcon(theme) {
+        document.getElementById('theme-icon').setAttribute('data-lucide', theme === 'light' ? 'sun' : 'moon');
+      },
+
+      toggleTheme() {
+        const isLight = document.body.classList.toggle('light-mode');
+        Storage.saveTheme(isLight ? 'light' : 'dark');
+        this._setThemeIcon(isLight ? 'light' : 'dark');
+        lucide.createIcons();
+      },
+
+      setFilter(f) {
+        this.filter = f;
+        ['all', 'meals', 'events'].forEach(k => {
+          document.getElementById('seg-' + k).classList.toggle('active', k === f);
+        });
+        this.render();
+      },
+
+      _visible(items) {
+        if (this.filter === 'meals') return items.filter(i => i.kind === 'meal');
+        if (this.filter === 'events') return items.filter(i => i.kind === 'event');
+        return items;
+      },
+
+      renderRange() {
+        const first = new Date(TRIP_DAYS[0].date + 'T12:00:00');
+        const last = new Date(TRIP_DAYS[TRIP_DAYS.length - 1].date + 'T12:00:00');
+        const opts = { month: 'short', day: 'numeric' };
+        document.getElementById('trip-range').textContent =
+          `${first.toLocaleDateString('en-US', opts)} – ${last.toLocaleDateString('en-US', { ...opts, year: 'numeric' })} · ${TRIP_DAYS.length} days`;
+      },
+
+      render() {
+        const done = Agenda.loadDone();
+        const today = Agenda.localDateStr();
+        const grid = document.getElementById('ov-grid');
+
+        grid.innerHTML = TRIP_DAYS.map(td => {
+          const day = this.plan.days[td.date];
+          const dObj = new Date(td.date + 'T12:00:00');
+          const items = this._visible(day ? Agenda.buildTimeline(td.date, day) : []);
+          const isToday = td.date === today;
+
+          const rows = items.length
+            ? items.map(it => {
+                const isDone = !!done[it.key];
+                return `<div class="ov-item ${it.kind === 'event' ? 'is-event' : ''} ${isDone ? 'done' : ''}">
+                  <span class="t">${it.timeLabel || ''}</span>
+                  <span class="n">${Agenda.escapeHtml(it.title)}</span>
+                </div>`;
+              }).join('')
+            : `<div class="ov-empty">No plans</div>`;
+
+          const flags = [];
+          if (td.vip) flags.push('<span class="badge badge-vip text-[8px]">VIP</span>');
+          if (td.isCheckin) flags.push('<span class="badge badge-checkin text-[8px]">In</span>');
+          if (td.isCheckout) flags.push('<span class="badge badge-checkout text-[8px]">Out</span>');
+
+          return `<div class="ov-card pool-${td.pool.toLowerCase()}">
+            <div class="flex items-start justify-between gap-1">
+              <div>
+                <div class="ov-dow">${dObj.toLocaleDateString('en-US', { weekday: 'short' })}${isToday ? ' · Today' : ''}</div>
+                <div class="ov-date">${dObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</div>
+              </div>
+              <span class="badge badge-pool-${td.pool.toLowerCase()} text-[8px]">${td.pool}</span>
+            </div>
+            <div class="ov-park">${Agenda.escapeHtml((day && day.park) || td.defaultPark || '')}</div>
+            ${flags.length ? `<div class="flex gap-1 mt-1 flex-wrap">${flags.join('')}</div>` : ''}
+            <div class="mt-1.5 flex-1">${rows}</div>
+          </div>`;
+        }).join('');
+
+        lucide.createIcons();
+      },
+
+      // Plain-text itinerary for pasting into a message.
+      buildText() {
+        const lines = ['Satizabal Family · Disney World 2026', ''];
+        TRIP_DAYS.forEach(td => {
+          const day = this.plan.days[td.date];
+          const dObj = new Date(td.date + 'T12:00:00');
+          const head = dObj.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+          const park = (day && day.park) || td.defaultPark || '';
+          lines.push(`${head} — ${park} [Bucket ${td.pool}]${td.vip ? ' (VIP)' : ''}`);
+          const items = Agenda.buildTimeline(td.date, day || { selections: {}, events: [] });
+          if (!items.length) lines.push('  (no plans)');
+          items.forEach(it => {
+            lines.push(`  ${(it.timeLabel || '').padEnd(7)} ${it.title}${it.location ? ' @ ' + it.location : ''}`);
+          });
+          lines.push('');
+        });
+        return lines.join('\n').trim();
+      },
+
+      async copyText() {
+        try {
+          await navigator.clipboard.writeText(this.buildText());
+          this.toast('Itinerary copied to clipboard', 'success');
+        } catch (e) {
+          this.toast('Copy failed — try a screenshot instead', 'warning');
+        }
+      },
+
+      toast(message, type = 'info') {
+        const c = document.getElementById('toast-container');
+        const t = document.createElement('div');
+        t.className = `toast toast-${type}`;
+        t.textContent = message;
+        c.appendChild(t);
+        setTimeout(() => { t.style.opacity = '0'; t.style.transition = 'opacity 0.3s'; setTimeout(() => t.remove(), 300); }, 2200);
+      }
+    };
+
+    document.addEventListener('DOMContentLoaded', () => Overview.init());
+  </script>
+</body>
+</html>
