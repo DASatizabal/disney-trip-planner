@@ -216,7 +216,7 @@
               </div>
               <span class="badge badge-pool-${td.pool.toLowerCase()} text-[8px]">${td.pool}</span>
             </div>
-            <div class="ov-park">${Agenda.escapeHtml((day && day.park) || td.defaultPark || '')}</div>
+            <div class="ov-park">${Agenda.escapeHtml(parkDisplay(day, td))}</div>
             ${flags.length ? `<div class="flex gap-1 mt-1 flex-wrap">${flags.join('')}</div>` : ''}
             <div class="mt-1.5 flex-1">${rows}</div>
           </div>`;
@@ -232,7 +232,7 @@
           const day = this.plan.days[td.date];
           const dObj = new Date(td.date + 'T12:00:00');
           const head = dObj.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-          const park = (day && day.park) || td.defaultPark || '';
+          const park = parkDisplay(day, td);
           lines.push(`${head} — ${park} [Bucket ${td.pool}]${td.vip ? ' (VIP)' : ''}`);
           const items = Agenda.buildTimeline(td.date, day || { selections: {}, events: [] });
           if (!items.length) lines.push('  (no plans)');

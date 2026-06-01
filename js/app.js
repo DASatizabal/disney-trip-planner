@@ -401,7 +401,7 @@ const App = {
         <div class="flex items-center gap-2 mb-1">
           <span class="font-bold text-sm">${dateLabel}</span>
           <span class="badge badge-pool-${td.pool.toLowerCase()}">${td.pool}</span>
-          <span class="text-[11px] text-white/40">${day.park}</span>
+          <span class="text-[11px] text-white/40">${parkDisplay(day, td)}</span>
           ${td.vip ? '<span class="badge badge-vip">VIP</span>' : ''}
         </div>`;
 

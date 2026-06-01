@@ -1,4 +1,4 @@
-const APP_VERSION = '1.13.0';
+const APP_VERSION = '1.14.0';
 const APP_BUILD = '4ad2a85';
 
 const FAMILY = [
@@ -92,6 +92,33 @@ function parkForTime(day, hhmm) {
   if (!day.splitDay || !day.splitParks) return day.park;
   const divider = day.splitDividerTime || DEFAULT_SPLIT_DIVIDER_TIME;
   return (hhmm || '00:00') < divider ? day.splitParks.am : day.splitParks.pm;
+}
+
+// Short park labels — EPCOT is already an acronym, so it stays as-is.
+const PARK_ABBREV = {
+  'Magic Kingdom': 'MK',
+  'EPCOT': 'EPCOT',
+  'Hollywood Studios': 'HS',
+  'Animal Kingdom': 'AK',
+  'Disney Springs': 'DS',
+  'Resort Day': 'Resort',
+  'Travel Day': 'Travel',
+  'Water Park - Typhoon Lagoon': 'Typhoon Lagoon',
+  'Water Park - Blizzard Beach': 'Blizzard Beach'
+};
+
+function parkAbbrev(name) {
+  return PARK_ABBREV[name] || name || '';
+}
+
+// Display label for a day's park. Split days name both parks (abbreviated,
+// e.g. "MK → EPCOT") instead of the literal "Split Day" placeholder.
+function parkDisplay(day, td) {
+  if (day && day.splitDay && day.splitParks) {
+    return `${parkAbbrev(day.splitParks.am)} → ${parkAbbrev(day.splitParks.pm)}`;
+  }
+  if (day && day.park) return day.park;
+  return (td && td.defaultPark) || '';
 }
 
 const STORAGE_PREFIX = 'ddp_planner';

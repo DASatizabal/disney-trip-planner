@@ -607,6 +607,102 @@ footer em {
 .site-nav svg { width: 14px; height: 14px; stroke-width: 2; }
 @media print { .site-nav { display: none; } }
 </style>
+<style>
+/* ── Edit mode ──────────────────────────────────────────── */
+.edit-only { display: none; }
+body.editing .edit-only { display: inline-block; }
+
+#editToggle.active { background: var(--teal); border-color: var(--teal); color: #fffaf0; }
+
+.edit-hint {
+  display: none;
+  margin: -16px 0 32px;
+  padding: 12px 18px;
+  background: rgba(42, 109, 107, 0.08);
+  border-left: 4px solid var(--teal);
+  font-family: 'Fraunces', serif;
+  font-size: 14px;
+  color: var(--ink-soft);
+  line-height: 1.5;
+}
+body.editing .edit-hint { display: block; }
+.edit-hint strong { color: var(--ink); }
+.edit-hint .hint-x { color: var(--postmark); font-weight: 700; }
+.edit-hint .hint-plus { color: var(--teal); font-family: 'JetBrains Mono', monospace; font-size: 12px; }
+
+/* Editable fields */
+body.editing .task { cursor: default; }
+body.editing .task-label,
+body.editing .task-note,
+body.editing .section-title {
+  outline: 1px dashed rgba(42, 109, 107, 0.45);
+  outline-offset: 3px;
+  border-radius: 2px;
+}
+body.editing .task-label:focus,
+body.editing .task-note:focus,
+body.editing .section-title:focus {
+  outline: 2px solid var(--teal);
+  background: #fffef9;
+}
+[contenteditable][data-placeholder]:empty::before {
+  content: attr(data-placeholder);
+  color: var(--ink-soft);
+  opacity: 0.55;
+  font-style: italic;
+}
+
+/* Empty notes stay hidden until you're editing */
+.task-note:empty { display: none; }
+body.editing .task-note:empty { display: block; }
+
+/* Per-task delete button */
+.task-del {
+  display: none;
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid var(--postmark);
+  border-radius: 50%;
+  background: #fffaf0;
+  color: var(--postmark);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+}
+body.editing .task-del { display: inline-flex; }
+.task-del:hover { background: var(--postmark); color: #fffaf0; }
+
+/* Add-item row */
+.task-add { display: none; padding: 6px 16px 2px; }
+body.editing .task-add { display: block; }
+.task-add button {
+  width: 100%;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 9px 14px;
+  background: transparent;
+  border: 1px dashed rgba(26, 20, 16, 0.3);
+  color: var(--ink-soft);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.task-add button:hover {
+  border-color: var(--teal);
+  color: var(--teal);
+  background: rgba(42, 109, 107, 0.05);
+}
+
+@media print { .task-del, .task-add, .edit-hint, .edit-only { display: none !important; } }
+</style>
 </head>
 <body>
 
@@ -641,10 +737,17 @@ footer em {
     <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
     <span class="progress-count" id="progressCount">0<em> / 0</em></span>
     <div class="actions">
+      <button class="btn" id="editToggle" onclick="toggleEditMode()">Edit</button>
+      <button class="btn edit-only btn-danger" onclick="revertEdits()">Restore defaults</button>
       <button class="btn" onclick="window.print()">Print</button>
       <button class="btn btn-danger" onclick="resetAll()">Reset</button>
     </div>
   </div>
+
+  <p class="edit-hint">
+    <strong>Editing.</strong> Click any task name or note to change it · the <span class="hint-x">×</span> deletes an item ·
+    <span class="hint-plus">+ Add item</span> at the bottom of a section adds one · section titles are editable too. Click <strong>Done</strong> when finished.
+  </p>
 
   <!-- ============================================================ -->
   <section class="section">
@@ -1326,59 +1429,306 @@ footer em {
 </div>
 
 <script>
-const STORAGE_KEY = 'disney_prep_checklist_v1';
+const STORAGE_KEY = 'disney_prep_checklist_v1';        // done / not-done state
+const EDITS_KEY   = 'disney_prep_checklist_edits_v1';  // user content edits
 
+let editMode = false;
+
+/* ── persistence ───────────────────────────────────────── */
 function loadState() {
-  try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
-  } catch (e) {
-    return {};
-  }
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); }
+  catch (e) { return {}; }
 }
-
 function saveState(state) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  } catch (e) {
-    console.error('Could not save to localStorage:', e);
-  }
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+  catch (e) { console.error('Could not save checklist state:', e); }
+}
+function loadEdits() {
+  try { return JSON.parse(localStorage.getItem(EDITS_KEY) || '{}'); }
+  catch (e) { return {}; }
+}
+function saveEdits(edits) {
+  try { localStorage.setItem(EDITS_KEY, JSON.stringify(edits)); }
+  catch (e) { console.error('Could not save checklist edits:', e); }
 }
 
+/* ── progress ──────────────────────────────────────────── */
 function updateProgress() {
-  const tasks = document.querySelectorAll('.task');
+  const total = document.querySelectorAll('.task').length;
   const done = document.querySelectorAll('.task.done').length;
-  const total = tasks.length;
   const pct = total > 0 ? (done / total) * 100 : 0;
-
   document.getElementById('progressFill').style.width = pct + '%';
   document.getElementById('progressCount').innerHTML = done + '<em> / ' + total + '</em>';
 }
 
-function initTasks() {
-  const state = loadState();
-  document.querySelectorAll('.task').forEach(task => {
-    const id = task.dataset.id;
-    if (state[id]) task.classList.add('done');
+/* ── building / applying edits ─────────────────────────── */
+function assignSectionKeys() {
+  document.querySelectorAll('.section').forEach(sec => {
+    const numEl = sec.querySelector('.section-number');
+    const num = numEl ? numEl.textContent.trim() : '';
+    sec.dataset.section = 'sec-' + num;
+  });
+}
 
-    task.addEventListener('click', () => {
-      task.classList.toggle('done');
-      const newState = loadState();
-      newState[id] = task.classList.contains('done');
-      saveState(newState);
-      updateProgress();
+function buildTaskEl(id) {
+  const li = document.createElement('li');
+  li.className = 'task';
+  li.dataset.id = id;
+  li.innerHTML =
+    '<div class="checkbox"></div>' +
+    '<div class="task-body">' +
+    '<span class="task-label"></span>' +
+    '<span class="task-note"></span>' +
+    '</div>';
+  return li;
+}
+
+function isCustom(id) {
+  const edits = loadEdits();
+  if (!edits.added) return false;
+  return Object.values(edits.added).some(arr => arr.includes(id));
+}
+
+// Recreate custom tasks, apply deletions, then overlay label/note/title text.
+function applyEdits() {
+  const edits = loadEdits();
+
+  Object.entries(edits.added || {}).forEach(([secKey, ids]) => {
+    const sec = document.querySelector('.section[data-section="' + secKey + '"]');
+    if (!sec) return;
+    const list = sec.querySelector('.task-list');
+    ids.forEach(id => {
+      if (list.querySelector('[data-id="' + id + '"]')) return;
+      list.appendChild(buildTaskEl(id));
     });
   });
+
+  Object.keys(edits.deleted || {}).forEach(id => {
+    const el = document.querySelector('.task[data-id="' + id + '"]');
+    if (el) el.remove();
+  });
+
+  document.querySelectorAll('.task').forEach(task => {
+    const id = task.dataset.id;
+    if (edits.labels && id in edits.labels) {
+      task.querySelector('.task-label').innerHTML = edits.labels[id];
+    }
+    if (edits.notes && id in edits.notes) {
+      let note = task.querySelector('.task-note');
+      if (!note) {
+        note = document.createElement('span');
+        note.className = 'task-note';
+        const tags = task.querySelector('.task-tags');
+        task.querySelector('.task-body').insertBefore(note, tags || null);
+      }
+      note.innerHTML = edits.notes[id];
+    }
+  });
+
+  Object.entries(edits.sectionTitles || {}).forEach(([secKey, html]) => {
+    const sec = document.querySelector('.section[data-section="' + secKey + '"]');
+    if (sec) sec.querySelector('.section-title').innerHTML = html;
+  });
+}
+
+// Give every task a note slot, a delete button, and placeholders.
+function injectAffordancesForTask(task) {
+  const body = task.querySelector('.task-body');
+  if (!task.querySelector('.task-note')) {
+    const note = document.createElement('span');
+    note.className = 'task-note';
+    const tags = task.querySelector('.task-tags');
+    body.insertBefore(note, tags || null);
+  }
+  if (!task.querySelector('.task-del')) {
+    const del = document.createElement('button');
+    del.type = 'button';
+    del.className = 'task-del';
+    del.title = 'Delete item';
+    del.textContent = '×';
+    del.addEventListener('click', e => { e.stopPropagation(); deleteTask(task); });
+    task.appendChild(del);
+  }
+  task.querySelector('.task-label').dataset.placeholder = 'Task name…';
+  task.querySelector('.task-note').dataset.placeholder = 'Add a note (optional)…';
+}
+
+function injectSectionAddButtons() {
+  document.querySelectorAll('.section').forEach(sec => {
+    const list = sec.querySelector('.task-list');
+    if (!list || list.querySelector('.task-add')) return;
+    const li = document.createElement('li');
+    li.className = 'task-add';
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.textContent = '+ Add item';
+    btn.addEventListener('click', () => addTask(sec.dataset.section));
+    li.appendChild(btn);
+    list.appendChild(li);
+  });
+}
+
+/* ── wiring ────────────────────────────────────────────── */
+function toggleDone(task) {
+  task.classList.toggle('done');
+  const st = loadState();
+  st[task.dataset.id] = task.classList.contains('done');
+  saveState(st);
   updateProgress();
 }
 
+function onFieldKeydown(e) {
+  if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); }
+}
+function onFieldBlur(e) {
+  const el = e.target;
+  const task = el.closest('.task');
+  if (!task) return;
+  const id = task.dataset.id;
+  const edits = loadEdits();
+  const html = el.innerHTML.trim();
+  if (el.classList.contains('task-label')) {
+    edits.labels = edits.labels || {};
+    edits.labels[id] = html;
+  } else {
+    edits.notes = edits.notes || {};
+    edits.notes[id] = html;
+  }
+  saveEdits(edits);
+}
+function onSectionBlur(e) {
+  const sec = e.target.closest('.section');
+  if (!sec) return;
+  const edits = loadEdits();
+  edits.sectionTitles = edits.sectionTitles || {};
+  edits.sectionTitles[sec.dataset.section] = e.target.innerHTML.trim();
+  saveEdits(edits);
+}
+
+function wireTask(task) {
+  const st = loadState();
+  if (st[task.dataset.id]) task.classList.add('done');
+
+  task.addEventListener('click', () => { if (!editMode) toggleDone(task); });
+  task.querySelector('.checkbox').addEventListener('click', e => {
+    if (!editMode) return;          // view mode: handled by the row click above
+    e.stopPropagation();
+    toggleDone(task);
+  });
+  task.querySelectorAll('.task-label, .task-note').forEach(el => {
+    el.addEventListener('blur', onFieldBlur);
+    el.addEventListener('keydown', onFieldKeydown);
+  });
+}
+
+function wireSectionTitles() {
+  document.querySelectorAll('.section-title').forEach(el => {
+    el.addEventListener('blur', onSectionBlur);
+    el.addEventListener('keydown', onFieldKeydown);
+  });
+}
+
+function setEditable(on) {
+  document.querySelectorAll('.task-label, .task-note, .section-title').forEach(el => {
+    if (on) el.setAttribute('contenteditable', 'true');
+    else el.removeAttribute('contenteditable');
+  });
+}
+
+/* ── actions ───────────────────────────────────────────── */
+function toggleEditMode() {
+  editMode = !editMode;
+  if (!editMode) cleanupEmptyTasks();
+  document.body.classList.toggle('editing', editMode);
+  const btn = document.getElementById('editToggle');
+  btn.textContent = editMode ? 'Done' : 'Edit';
+  btn.classList.toggle('active', editMode);
+  setEditable(editMode);
+}
+
+function addTask(sectionKey) {
+  const sec = document.querySelector('.section[data-section="' + sectionKey + '"]');
+  if (!sec) return;
+  const list = sec.querySelector('.task-list');
+  const id = 'custom-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 6);
+
+  const edits = loadEdits();
+  edits.added = edits.added || {};
+  edits.added[sectionKey] = edits.added[sectionKey] || [];
+  edits.added[sectionKey].push(id);
+  edits.labels = edits.labels || {};
+  edits.labels[id] = '';
+  saveEdits(edits);
+
+  const task = buildTaskEl(id);
+  list.insertBefore(task, list.querySelector('.task-add'));
+  injectAffordancesForTask(task);
+  wireTask(task);
+  setEditable(editMode);
+  updateProgress();
+  task.querySelector('.task-label').focus();
+}
+
+function deleteTask(task) {
+  const id = task.dataset.id;
+  const edits = loadEdits();
+  let custom = false;
+  if (edits.added) {
+    Object.keys(edits.added).forEach(k => {
+      const i = edits.added[k].indexOf(id);
+      if (i >= 0) { edits.added[k].splice(i, 1); custom = true; }
+    });
+  }
+  if (!custom) { edits.deleted = edits.deleted || {}; edits.deleted[id] = true; }
+  if (edits.labels) delete edits.labels[id];
+  if (edits.notes) delete edits.notes[id];
+  saveEdits(edits);
+
+  const st = loadState();
+  delete st[id];
+  saveState(st);
+
+  task.remove();
+  updateProgress();
+}
+
+// Drop blank custom tasks when leaving edit mode so no empty rows linger.
+function cleanupEmptyTasks() {
+  document.querySelectorAll('.task').forEach(task => {
+    const label = task.querySelector('.task-label');
+    if (label && label.textContent.trim() === '' && isCustom(task.dataset.id)) {
+      deleteTask(task);
+    }
+  });
+}
+
 function resetAll() {
-  if (!confirm('Reset all checkboxes? This cannot be undone.')) return;
+  if (!confirm('Reset all checkboxes? This keeps your edits but clears every check mark.')) return;
   localStorage.removeItem(STORAGE_KEY);
   document.querySelectorAll('.task').forEach(t => t.classList.remove('done'));
   updateProgress();
 }
 
-initTasks();
+function revertEdits() {
+  if (!confirm('Discard all edits and restore the original checklist text? Your check marks are kept.')) return;
+  localStorage.removeItem(EDITS_KEY);
+  location.reload();
+}
+
+/* ── init ──────────────────────────────────────────────── */
+function init() {
+  assignSectionKeys();
+  applyEdits();
+  document.querySelectorAll('.task').forEach(task => {
+    injectAffordancesForTask(task);
+    wireTask(task);
+  });
+  injectSectionAddButtons();
+  wireSectionTitles();
+  updateProgress();
+}
+
+init();
 </script>
 
 </body>

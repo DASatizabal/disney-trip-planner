@@ -289,7 +289,8 @@
         const badges = [];
         if (td) {
           badges.push(`<span class="badge badge-pool-${td.pool.toLowerCase()}">Bucket ${td.pool}</span>`);
-          if (day && day.park) badges.push(`<span class="text-xs text-white/60">${Agenda.escapeHtml(day.park)}</span>`);
+          const parkLbl = parkDisplay(day, td);
+          if (parkLbl) badges.push(`<span class="text-xs text-white/60">${Agenda.escapeHtml(parkLbl)}</span>`);
           if (td.vip) badges.push(`<span class="badge badge-vip">VIP</span>`);
           if (td.isCheckin) badges.push(`<span class="badge badge-checkin">Check-in</span>`);
           if (td.isCheckout) badges.push(`<span class="badge badge-checkout">Check-out</span>`);
