@@ -55,6 +55,15 @@ const RestaurantMerge = {
     return '';
   },
 
+  // Synthetic id for CSV-only entries (no DB id). Must stay stable: saved
+  // plans store this string and the credit engine resolves it back to count
+  // credits. Keep the slug rules identical everywhere so encode/decode is
+  // lossless (decoding by stripping/space-swapping is lossy for names with
+  // punctuation like apostrophes — use findByCsvId instead).
+  csvId(name) {
+    return '_csv_' + (name || '').replace(/[^a-z0-9]/gi, '_').toLowerCase();
+  },
+
   getMerged() {
     if (this._merged) return this._merged;
 
@@ -196,8 +205,21 @@ const RestaurantMerge = {
       });
     }
 
+    // Lossless lookup from synthetic CSV id → merged entry, so selections
+    // stored as "_csv_<slug>" resolve back exactly (the credit engine and
+    // the planner cards both rely on this).
+    this._csvIdMap = new Map();
+    result.forEach(r => { this._csvIdMap.set(this.csvId(r.name), r); });
+
     this._merged = result;
     return result;
+  },
+
+  // Resolve a synthetic "_csv_<slug>" id back to its merged entry.
+  findByCsvId(id) {
+    if (typeof id !== 'string') return null;
+    this.getMerged();
+    return this._csvIdMap.get(id) || null;
   },
 
   // Get a restaurant by DB id (for credit engine compatibility)

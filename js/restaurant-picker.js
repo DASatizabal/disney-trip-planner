@@ -288,7 +288,7 @@ const RestaurantPicker = {
         r = merged;
         // CSV-only entries get a temporary id for the selection
         if (!r.id) {
-          r._tempId = '_csv_' + restaurantName.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+          r._tempId = RestaurantMerge.csvId(restaurantName);
         }
       }
     }

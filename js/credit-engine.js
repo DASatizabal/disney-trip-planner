@@ -2,6 +2,17 @@ const CreditEngine = {
   _restaurantCache: null,
 
   _getRestaurant(id) {
+    if (id == null) return undefined;
+    // CSV-only selections store a synthetic "_csv_<slug>" string id with no DB
+    // entry. Resolve them through the merge layer so their credits and OOP cost
+    // still count toward the pool balances (otherwise added/removed CSV-only
+    // snacks and meals never update the dashboard).
+    if (typeof id === 'string') {
+      if (typeof RestaurantMerge !== 'undefined') {
+        return RestaurantMerge.findByCsvId(id) || undefined;
+      }
+      return undefined;
+    }
     if (!this._restaurantCache) {
       this._restaurantCache = {};
       RESTAURANTS.forEach(r => { this._restaurantCache[r.id] = r; });

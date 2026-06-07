@@ -473,8 +473,7 @@ const Planner = {
   _renderTimelineMeal(td, day, slot, sel) {
     let r = CreditEngine._getRestaurant(sel.restaurantId);
     if (!r && typeof sel.restaurantId === 'string') {
-      const name = sel.restaurantId.replace(/^_csv_/, '').replace(/_/g, ' ');
-      r = RestaurantMerge.findByName(name);
+      r = RestaurantMerge.findByCsvId(sel.restaurantId);
     }
     if (!r) {
       day.selections[slot] = null;
@@ -635,8 +634,7 @@ const Planner = {
   _renderSnackCard(td, day, slot, sel) {
     let r = CreditEngine._getRestaurant(sel.restaurantId);
     if (!r && typeof sel.restaurantId === 'string') {
-      const name = sel.restaurantId.replace(/^_csv_/, '').replace(/_/g, ' ');
-      r = RestaurantMerge.findByName(name);
+      r = RestaurantMerge.findByCsvId(sel.restaurantId);
     }
     if (!r) {
       day.selections[slot] = null;
@@ -1263,7 +1261,7 @@ const Planner = {
       if (!sel) return;
       let r = CreditEngine._getRestaurant(sel.restaurantId);
       if (!r && typeof sel.restaurantId === 'string') {
-        r = RestaurantMerge.findByName(sel.restaurantId.replace(/^_csv_/, '').replace(/_/g, ' '));
+        r = RestaurantMerge.findByCsvId(sel.restaurantId);
       }
       if (!r) return;
       const isParkRestaurant = parkLocations.includes(r.location);
