@@ -234,16 +234,21 @@ const Planner = {
   // remaining capacity for the category — A's credits expire that night
   // so spending B's first would waste them.
   _computeAllSimUsage() {
-    const usage = { A: { ts: 0, qs: 0, sn: 0 }, B: { ts: 0, qs: 0, sn: 0 } };
+    const blank = () => ({ tsAdult: 0, tsChild: 0, qsAdult: 0, qsChild: 0, sn: 0 });
+    const usage = { A: blank(), B: blank() };
     const attribution = {}; // `${date}|${rid}|${time}` -> 'A' | 'B' | 'vip' | 'ap' | 'oop'
     if (localStorage.getItem('ddp_planner_sim_picks') !== 'on') return { usage, attribution };
     const overrides = this._getSimOverrides();
     const balA = CreditEngine.getBalance('A', this._planState);
     const balB = CreditEngine.getBalance('B', this._planState);
-    const rem = {
-      A: { ts: balA.ts.remaining, qs: balA.qs.remaining, sn: balA.sn.remaining },
-      B: { ts: balB.ts.remaining, qs: balB.qs.remaining, sn: balB.sn.remaining }
-    };
+    const remFrom = (bal) => ({
+      tsAdult: bal.tsAdult.remaining, tsChild: bal.tsChild.remaining,
+      qsAdult: bal.qsAdult.remaining, qsChild: bal.qsChild.remaining, sn: bal.sn.remaining
+    });
+    const rem = { A: remFrom(balA), B: remFrom(balB) };
+    // Sim picks default to the whole family: 3 adults + 1 child.
+    const simAdults = FAMILY.filter(m => CreditEngine.isAdult(m)).length;
+    const simChildren = FAMILY.length - simAdults;
     TRIP_DAYS.forEach(td => {
       const day = this._planState.days[td.date];
       if (!day) return;
@@ -263,20 +268,26 @@ const Planner = {
           return;
         }
         const cat = r.creditCategory;
-        if (!(cat in usage.A)) {
+        if (cat !== 'ts' && cat !== 'qs' && cat !== 'sn') {
           attribution[key] = 'oop';
           return;
         }
-        const credits = cat === 'sn' ? r.creditsConsumed : r.creditsConsumed * FAMILY.length;
-        // Overlap day (June 8: A expiring + B fresh) drains A first when
-        // A still has capacity for this category — A expires that night,
-        // so spending B first wastes A's credits.
+        // Split the pick's credits across its age buckets (snacks don't split).
+        const needed = cat === 'sn'
+          ? { sn: r.creditsConsumed }
+          : { [cat + 'Adult']: r.creditsConsumed * simAdults, [cat + 'Child']: r.creditsConsumed * simChildren };
+        // Overlap day (June 8: A expiring + B fresh) drains A first when A
+        // still has capacity for every bucket this pick touches — A expires
+        // that night, so spending B first wastes A's credits.
         let pool = td.pool;
-        if (td.overlapPool === 'A' && td.pool === 'B' && rem.A[cat] >= credits) {
+        if (td.overlapPool === 'A' && td.pool === 'B'
+            && Object.keys(needed).every(b => rem.A[b] >= needed[b])) {
           pool = 'A';
         }
-        usage[pool][cat] += credits;
-        rem[pool][cat] -= credits;
+        Object.keys(needed).forEach(b => {
+          usage[pool][b] += needed[b];
+          rem[pool][b] -= needed[b];
+        });
         attribution[key] = pool;
       });
     });
@@ -515,7 +526,7 @@ const Planner = {
       <div class="meal-slot meal-slot-filled relative group ${mismatchClass}"
            draggable="true"
            data-date="${td.date}" data-slot="${slot}"
-           onclick="Planner.onSlotClick('${td.date}', '${slot}')">
+           onclick="Planner.openMealEditor('${td.date}', '${slot}')">
         <div class="flex items-start justify-between gap-1">
           <div class="min-w-0 flex-1">
             <div class="text-[9px] text-white/30 uppercase tracking-wider mb-0.5">
@@ -652,7 +663,7 @@ const Planner = {
       <div class="meal-slot meal-slot-filled snack-card relative group"
            draggable="true"
            data-date="${td.date}" data-slot="${slot}"
-           onclick="Planner.onSlotClick('${td.date}', '${slot}')">
+           onclick="Planner.openMealEditor('${td.date}', '${slot}')">
         <div class="flex items-center justify-between gap-1">
           <div class="min-w-0 flex-1">
             <div class="text-xs font-medium truncate">${this._escapeHtml(r.name)}</div>
@@ -825,23 +836,27 @@ const Planner = {
   // Credit Dashboard
   renderCreditDashboard() {
     const simOn = localStorage.getItem('ddp_planner_sim_picks') === 'on';
+    const blank = { tsAdult: 0, tsChild: 0, qsAdult: 0, qsChild: 0, sn: 0 };
     const simAll = (simOn && this._simUsageByPool)
       ? this._simUsageByPool
-      : { A: { ts: 0, qs: 0, sn: 0 }, B: { ts: 0, qs: 0, sn: 0 } };
+      : { A: { ...blank }, B: { ...blank } };
+    // Bucket key → lowercase element-id suffix used in index.html.
+    const BUCKET_IDS = { tsAdult: 'tsadult', tsChild: 'tschild', qsAdult: 'qsadult', qsChild: 'qschild', sn: 'sn' };
     ['A', 'B'].forEach(poolId => {
       const balance = CreditEngine.getBalance(poolId, this._planState);
       const sim = simAll[poolId];
       const p = poolId.toLowerCase();
 
-      ['ts', 'qs', 'sn'].forEach(type => {
+      CreditEngine.BUCKETS.forEach(type => {
+        const idSuffix = BUCKET_IDS[type];
         const b = balance[type];
         const used = b.used;
         const total = b.total;
         const simN = sim[type] || 0;
-        const label = document.getElementById(`pool-${p}-${type}`);
-        const simLabel = document.getElementById(`pool-${p}-${type}-sim`);
-        const bar = document.getElementById(`pool-${p}-${type}-bar`);
-        const simBar = document.getElementById(`pool-${p}-${type}-sim-bar`);
+        const label = document.getElementById(`pool-${p}-${idSuffix}`);
+        const simLabel = document.getElementById(`pool-${p}-${idSuffix}-sim`);
+        const bar = document.getElementById(`pool-${p}-${idSuffix}-bar`);
+        const simBar = document.getElementById(`pool-${p}-${idSuffix}-sim-bar`);
 
         if (simOn) {
           // Stacked-used mode: green = confirmed, purple = sim, gray = remaining
@@ -883,15 +898,17 @@ const Planner = {
         }
       });
 
-      // Compact mobile display
+      // Compact mobile display — adult/child shown as "A+C" per category.
       const compact = document.getElementById(`pool-${p}-compact`);
       if (compact) {
         const ba = balance;
-        const simSuffix = simOn && (sim.ts + sim.qs + sim.sn) > 0
-          ? ` (+${sim.ts}t ${sim.qs}q ${sim.sn}s sim)`
-          : '';
-        compact.textContent = `${ba.ts.remaining}ts ${ba.qs.remaining}qs ${ba.sn.remaining}sn${simSuffix}`;
-        compact.className = [ba.ts, ba.qs, ba.sn].some(b => b.remaining < 0) ? 'text-red-400' : '';
+        const simTotal = sim.tsAdult + sim.tsChild + sim.qsAdult + sim.qsChild + sim.sn;
+        const simSuffix = simOn && simTotal > 0 ? ` (+${simTotal} sim)` : '';
+        compact.textContent =
+          `${ba.tsAdult.remaining}+${ba.tsChild.remaining}ts ` +
+          `${ba.qsAdult.remaining}+${ba.qsChild.remaining}qs ` +
+          `${ba.sn.remaining}sn${simSuffix}`;
+        compact.className = CreditEngine.BUCKETS.some(k => ba[k].remaining < 0) ? 'text-red-400' : '';
       }
     });
 
@@ -988,6 +1005,219 @@ const Planner = {
     });
   },
 
+  // ---- Meal / snack edit card -----------------------------------------
+  // Clicking a filled entry opens this card to modify payment, pool, diners
+  // (adult/child), and time in place — adding is done via the section
+  // buttons, not by clicking an entry.
+  _mealEditing: null,
+
+  _resolveSelRestaurant(sel) {
+    let r = CreditEngine._getRestaurant(sel.restaurantId);
+    if (!r && typeof sel.restaurantId === 'string') r = RestaurantMerge.findByCsvId(sel.restaurantId);
+    return r;
+  },
+
+  openMealEditor(date, slot) {
+    this._closeAllMenus();
+    const day = this._planState.days[date];
+    const sel = day && day.selections[slot];
+    if (!sel) return;
+    const r = this._resolveSelRestaurant(sel);
+    if (!r) { day.selections[slot] = null; this._onChanged(); return; }
+
+    const pools = CreditEngine.getPoolsForDate(date);
+    let pool = sel.pool || pools[0];
+    if (!pools.includes(pool)) pool = pools[0];
+
+    this._mealEditing = {
+      date, slot,
+      draft: {
+        restaurantId: sel.restaurantId,
+        paymentMethod: sel.paymentMethod || 'ddp',
+        pool,
+        diners: [...CreditEngine.selectionDiners(sel)],
+        time: sel.time || DEFAULT_MEAL_TIMES[slot]
+      }
+    };
+
+    const td = TRIP_DAYS.find(d => d.date === date);
+    document.getElementById('meal-edit-subtitle').textContent =
+      `${td?.dow || date} — ${MEAL_LABELS[slot]}`;
+    this._renderMealEditor();
+    document.getElementById('meal-editor-modal').classList.add('active');
+    lucide.createIcons();
+  },
+
+  closeMealEditor() {
+    this._mealEditing = null;
+    document.getElementById('meal-editor-modal').classList.remove('active');
+  },
+
+  _renderMealEditor() {
+    const st = this._mealEditing;
+    if (!st) return;
+    const { date, slot, draft } = st;
+    const sel = { diners: draft.diners, restaurantId: draft.restaurantId };
+    const r = this._resolveSelRestaurant(sel);
+    if (!r) return;
+    const isSnack = r.creditCategory === 'sn';
+    const numericId = typeof draft.restaurantId === 'number' ? draft.restaurantId : null;
+
+    // Header: restaurant name + meta
+    document.getElementById('meal-edit-rest-name').textContent = r.name;
+    document.getElementById('meal-edit-rest-meta').innerHTML =
+      `<span class="badge ${this._creditBadgeClass(r.creditType)}">${r.creditType}</span>` +
+      (r.location ? `<span class="text-[10px] text-white/40">${this._escapeHtml(r.location)}</span>` : '');
+
+    // Payment options (availability mirrors the picker flow)
+    const acceptsDDP = r.acceptsDDP && r.creditType !== 'OOP';
+    const vip = numericId != null ? CreditEngine.getVIPInfo(numericId, date, slot, draft.diners) : { available: false };
+    const ap = numericId != null ? CreditEngine.getAPInfo(numericId, date, slot, draft.diners) : { available: false };
+    const methods = [];
+    if (acceptsDDP) methods.push({ m: 'ddp', label: 'DDP Credit' });
+    if (vip.available) methods.push({ m: 'vip', label: `VIP ${vip.pct}%` });
+    if (ap.available) methods.push({ m: 'ap', label: `AP ${ap.pct}%` });
+    methods.push({ m: 'oop', label: 'Out of Pocket' });
+    document.getElementById('meal-edit-payment').innerHTML = methods.map(o => {
+      const active = draft.paymentMethod === o.m;
+      return `<button onclick="Planner._mealEditSetPayment('${o.m}')"
+        class="px-2.5 py-1.5 text-xs rounded-lg border transition-colors ${active
+          ? 'border-blue-400/60 bg-blue-500/20 text-white'
+          : 'border-white/10 bg-white/5 hover:bg-white/10 text-white/70'}">${o.label}</button>`;
+    }).join('');
+
+    // Pool selector — only when paying DDP and the day has two buckets
+    const pools = CreditEngine.getPoolsForDate(date);
+    const poolWrap = document.getElementById('meal-edit-pool-wrap');
+    if (draft.paymentMethod === 'ddp' && pools.length > 1) {
+      poolWrap.style.display = '';
+      document.getElementById('meal-edit-pool').innerHTML = pools.map(pid => {
+        const active = draft.pool === pid;
+        return `<button onclick="Planner._mealEditSetPool('${pid}')"
+          class="px-2.5 py-1.5 text-xs rounded-lg border transition-colors ${active
+            ? 'border-blue-400/60 bg-blue-500/20 text-white'
+            : 'border-white/10 bg-white/5 hover:bg-white/10 text-white/70'}">
+          <span class="badge badge-pool-${pid.toLowerCase()}">${pid}</span> ${POOLS[pid].resort}</button>`;
+      }).join('');
+    } else {
+      poolWrap.style.display = 'none';
+    }
+
+    // Diners (named members → adult/child). Hidden for snacks where credits
+    // are per-item, but still useful for OOP cost, so we keep it visible with
+    // a note.
+    document.getElementById('meal-edit-diners').innerHTML = FAMILY.map(m => {
+      const checked = draft.diners.includes(m.id);
+      const ageLabel = CreditEngine.isAdult(m) ? 'Adult' : `Child · age ${m.age}`;
+      return `<label class="flex items-center gap-2 px-2 py-1.5 rounded border border-white/10 hover:bg-white/5 cursor-pointer">
+        <input type="checkbox" ${checked ? 'checked' : ''} onchange="Planner._mealEditToggleDiner('${m.id}')" class="accent-blue-500">
+        <span class="text-sm font-medium">${m.name}</span>
+        <span class="text-[10px] text-white/40">${ageLabel}</span>
+      </label>`;
+    }).join('');
+
+    // Time
+    document.getElementById('meal-edit-time').value = draft.time;
+
+    // Live summary of credit / cost impact
+    const summary = [];
+    if (draft.paymentMethod === 'ddp') {
+      const bd = CreditEngine.creditBreakdown({ diners: draft.diners }, r);
+      const poolLabel = `Bucket ${draft.pool}`;
+      if (isSnack) {
+        summary.push(`${poolLabel}: ${bd.total} Snack credit${bd.total !== 1 ? 's' : ''}`);
+      } else {
+        const parts = [];
+        if (bd.adultCredits) parts.push(`${bd.adultCredits} Adult ${r.creditType}`);
+        if (bd.childCredits) parts.push(`${bd.childCredits} Child ${r.creditType}`);
+        summary.push(`${poolLabel}: ${parts.join(' + ') || 'no diners selected'}`);
+      }
+    } else {
+      const gross = isSnack ? (r.avgAdultPrice || 0) : CreditEngine.costForDiners(r, draft.diners);
+      let net = gross;
+      if (draft.paymentMethod === 'vip') net = gross * (1 - (r.vipDiscountPct || 0) / 100);
+      if (draft.paymentMethod === 'ap') net = gross * (1 - (r.apDiscountPct || 0) / 100);
+      summary.push(net > 0 ? `~$${Math.round(net)} out of pocket` : 'No credit used');
+    }
+    if (isSnack) summary.push('snacks count per item, not per person');
+    document.getElementById('meal-edit-summary').textContent = summary.join(' · ');
+  },
+
+  _mealEditSetPayment(method) {
+    const st = this._mealEditing;
+    if (!st) return;
+    st.draft.paymentMethod = method;
+    if (method === 'ddp') {
+      const pools = CreditEngine.getPoolsForDate(st.date);
+      if (!pools.includes(st.draft.pool)) st.draft.pool = pools[0];
+    }
+    this._renderMealEditor();
+  },
+
+  _mealEditSetPool(pool) {
+    if (!this._mealEditing) return;
+    this._mealEditing.draft.pool = pool;
+    this._renderMealEditor();
+  },
+
+  _mealEditToggleDiner(id) {
+    const st = this._mealEditing;
+    if (!st) return;
+    const idx = st.draft.diners.indexOf(id);
+    if (idx >= 0) st.draft.diners.splice(idx, 1);
+    else st.draft.diners.push(id);
+    this._renderMealEditor();
+  },
+
+  _mealEditDinersPreset(which) {
+    const st = this._mealEditing;
+    if (!st) return;
+    if (which === 'all') st.draft.diners = FAMILY.map(m => m.id);
+    else if (which === 'adults') st.draft.diners = FAMILY.filter(m => CreditEngine.isAdult(m)).map(m => m.id);
+    else if (which === 'kids') st.draft.diners = FAMILY.filter(m => !CreditEngine.isAdult(m)).map(m => m.id);
+    else st.draft.diners = [];
+    this._renderMealEditor();
+  },
+
+  _mealEditChangeRestaurant() {
+    const st = this._mealEditing;
+    if (!st) return;
+    const { date, slot } = st;
+    this.closeMealEditor();
+    this.onSlotClick(date, slot);
+  },
+
+  _mealEditDelete() {
+    const st = this._mealEditing;
+    if (!st) return;
+    const { date, slot } = st;
+    this.closeMealEditor();
+    this.clearSlot(date, slot);
+  },
+
+  saveMealEditor() {
+    const st = this._mealEditing;
+    if (!st) return;
+    const { date, slot, draft } = st;
+    const time = document.getElementById('meal-edit-time').value.trim();
+    if (!/^\d{1,2}:\d{2}$/.test(time)) { App.toast('Valid time required (HH:MM)', 'warning'); return; }
+
+    const ddp = draft.paymentMethod === 'ddp';
+    History.push(JSON.parse(JSON.stringify(this._planState)));
+    const existing = this._planState.days[date].selections[slot] || {};
+    this._planState.days[date].selections[slot] = {
+      restaurantId: draft.restaurantId,
+      paymentMethod: draft.paymentMethod,
+      pool: ddp ? draft.pool : null,
+      notes: existing.notes || '',
+      adrNumber: existing.adrNumber || '',
+      diners: draft.diners.length ? draft.diners : CreditEngine.defaultDiners(),
+      time
+    };
+    this.closeMealEditor();
+    this._onChanged();
+  },
+
   _applySelection(date, slot, restaurantId, paymentMethod, pool) {
     // F1: New selections default to whole-family diners
     const diners = CreditEngine.defaultDiners();
@@ -995,11 +1225,12 @@ const Planner = {
     if (paymentMethod === 'ddp' && pool && typeof restaurantId === 'number') {
       const check = CreditEngine.wouldOverdraft(pool, restaurantId, this._planState, diners);
       if (!check.ok) {
-        const r = CreditEngine._getRestaurant(restaurantId);
-        const typeName = (check.creditType || 'ts').toUpperCase();
+        const over = check.checks.filter(c => !c.ok)
+          .map(c => `${c.label} ${c.currentRemaining}/${c.total} → ${c.afterRemaining}`)
+          .join(', ');
         App.confirm(
           'Credit Overdraft',
-          `Bucket ${pool} ${typeName}: ${check.currentRemaining}/${check.total} remaining → would be ${check.afterRemaining}/${check.total}. Use this credit anyway (shows as over budget) or pay OOP instead?`,
+          `Bucket ${pool}: ${over}. Use these credits anyway (shows as over budget) or pay OOP instead?`,
           () => { this._commitSelection(date, slot, restaurantId, paymentMethod, pool); },
           true,
           'Use Anyway',
@@ -1070,15 +1301,22 @@ const Planner = {
         </label>
       `;
     }).join('');
-    // Credit + cost summary (snacks are per-item, meals are per-diner)
+    // Credit + cost summary — meals split credits by diner age, snacks are
+    // per-item.
     const sel = this._planState.days[state.date].selections[state.slot];
-    const r = CreditEngine._getRestaurant(sel.restaurantId);
+    let r = CreditEngine._getRestaurant(sel.restaurantId);
+    if (!r && typeof sel.restaurantId === 'string') r = RestaurantMerge.findByCsvId(sel.restaurantId);
     const summary = [];
     if (r && r.creditCategory !== 'oop') {
-      const credits = r.creditCategory === 'sn'
-        ? r.creditsConsumed
-        : r.creditsConsumed * state.diners.length;
-      summary.push(`${credits} ${r.creditType} credit${credits !== 1 ? 's' : ''}`);
+      const bd = CreditEngine.creditBreakdown({ diners: state.diners }, r);
+      if (bd.category === 'sn') {
+        summary.push(`${bd.total} ${r.creditType} credit${bd.total !== 1 ? 's' : ''}`);
+      } else {
+        const parts = [];
+        if (bd.adultCredits) parts.push(`${bd.adultCredits} Adult ${r.creditType}`);
+        if (bd.childCredits) parts.push(`${bd.childCredits} Child ${r.creditType}`);
+        summary.push(parts.join(' + ') || `0 ${r.creditType}`);
+      }
     }
     if (r) {
       const gross = r.creditCategory === 'sn'
@@ -1469,11 +1707,11 @@ const Planner = {
         });
 
         const balance = CreditEngine.getBalance(targetPool, simState);
-        const overdrafts = ['ts', 'qs', 'sn'].filter(t => balance[t].remaining < 0);
+        const overdrafts = CreditEngine.BUCKETS.filter(t => balance[t].remaining < 0);
 
         if (overdrafts.length > 0) {
           const details = overdrafts.map(t =>
-            `${t.toUpperCase()}: ${balance[t].remaining}/${balance[t].total}`
+            `${CreditEngine.BUCKET_LABELS[t]}: ${balance[t].remaining}/${balance[t].total}`
           ).join(', ');
           App.confirm(
             'Clone Would Overdraft',

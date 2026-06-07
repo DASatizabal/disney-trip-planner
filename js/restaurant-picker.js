@@ -400,8 +400,11 @@ const RestaurantPicker = {
       const balance = CreditEngine.getBalance(poolId, planState);
       const r = typeof restaurantId === 'number' ? CreditEngine._getRestaurant(restaurantId) : null;
       const cat = r ? r.creditCategory : 'ts';
-      const remaining = balance[cat].remaining;
       const pool = POOLS[poolId];
+      // Show the adult/child split for TS/QS; snacks are a single pool.
+      const remainingLabel = cat === 'sn'
+        ? `${balance.sn.remaining} Snack credits remaining`
+        : `Adult ${cat.toUpperCase()} ${balance[cat + 'Adult'].remaining} · Child ${cat.toUpperCase()} ${balance[cat + 'Child'].remaining} remaining`;
 
       return `
         <button onclick="RestaurantPicker._onPoolChoice(${typeof restaurantId === 'number' ? restaurantId : "'" + restaurantId + "'"}, '${paymentMethod}', '${poolId}')"
@@ -410,7 +413,7 @@ const RestaurantPicker = {
             <span class="badge badge-pool-${poolId.toLowerCase()}">Bucket ${poolId}</span>
             <span class="text-sm font-medium">${pool.resort}</span>
           </div>
-          <div class="text-[11px] text-white/40 mt-1">${remaining} ${cat.toUpperCase()} credits remaining</div>
+          <div class="text-[11px] text-white/40 mt-1">${remainingLabel}</div>
         </button>
       `;
     }).join('');

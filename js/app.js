@@ -130,6 +130,7 @@ const App = {
     'payment-modal':    { close: () => RestaurantPicker.closePayment() },
     'pool-modal':       { close: () => RestaurantPicker.closePool() },
     'diners-modal':     { close: () => Planner.closeDinersEditor() },
+    'meal-editor-modal':{ close: () => Planner.closeMealEditor() },
     'meal-slot-modal':  { close: () => Planner.closeMealSlotPicker() },
     'event-modal':      {
       close: () => Planner.closeEventEditor(),
@@ -450,10 +451,14 @@ const App = {
     const oop = CreditEngine.estimateOOPDetailed(plan);
     const balA = CreditEngine.getBalance('A', plan);
     const balB = CreditEngine.getBalance('B', plan);
+    const creditLine = (b) =>
+      `Adult TS ${b.tsAdult.remaining}/${b.tsAdult.total}, Child TS ${b.tsChild.remaining}/${b.tsChild.total}, ` +
+      `Adult QS ${b.qsAdult.remaining}/${b.qsAdult.total}, Child QS ${b.qsChild.remaining}/${b.qsChild.total}, ` +
+      `Snacks ${b.sn.remaining}/${b.sn.total}`;
     html += `<div class="text-xs space-y-1">
       <div class="font-bold">Credit Summary</div>
-      <div>Bucket A: ${balA.ts.remaining}/${balA.ts.total} TS, ${balA.qs.remaining}/${balA.qs.total} QS, ${balA.sn.remaining}/${balA.sn.total} SN</div>
-      <div>Bucket B: ${balB.ts.remaining}/${balB.ts.total} TS, ${balB.qs.remaining}/${balB.qs.total} QS, ${balB.sn.remaining}/${balB.sn.total} SN</div>
+      <div>Bucket A: ${creditLine(balA)}</div>
+      <div>Bucket B: ${creditLine(balB)}</div>
       <div class="pt-1">Estimated OOP: <strong>$${oop.committed}</strong></div>
     </div>`;
 

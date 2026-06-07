@@ -1,4 +1,4 @@
-const APP_VERSION = '1.14.1';
+const APP_VERSION = '1.15.0';
 const APP_BUILD = 'd761663';
 
 const FAMILY = [
@@ -12,12 +12,16 @@ const POOLS = {
   A: {
     name: 'Bucket A', resort: 'Port Orleans Riverside', confirmation: '#42007787',
     checkin: '2026-06-05', checkout: '2026-06-08', nights: 3,
-    ts: 12, qs: 12, sn: 12, color: 'blue'
+    // DDP credits are issued per guest per night and split by age: adults
+    // (10+) and children (3-9) get separate pools. Party = 3 adults + 1 child,
+    // so credits split 3:1. 3 nights → adults 3×3=9, child 1×3=3.
+    tsAdult: 9, tsChild: 3, qsAdult: 9, qsChild: 3, sn: 12, color: 'blue'
   },
   B: {
     name: 'Bucket B', resort: 'Art of Animation', confirmation: '#41849743',
     checkin: '2026-06-08', checkout: '2026-06-12', nights: 4,
-    ts: 16, qs: 16, sn: 16, color: 'green'
+    // 4 nights → adults 3×4=12, child 1×4=4.
+    tsAdult: 12, tsChild: 4, qsAdult: 12, qsChild: 4, sn: 16, color: 'green'
   }
 };
 

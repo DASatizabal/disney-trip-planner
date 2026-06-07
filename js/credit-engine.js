@@ -1,6 +1,14 @@
 const CreditEngine = {
   _restaurantCache: null,
 
+  // Adult/child-split credit buckets. TS and QS are split by diner age
+  // (adults 10+, children 3-9); snacks stay a single shared pool.
+  BUCKETS: ['tsAdult', 'tsChild', 'qsAdult', 'qsChild', 'sn'],
+  BUCKET_LABELS: {
+    tsAdult: 'Adult TS', tsChild: 'Child TS',
+    qsAdult: 'Adult QS', qsChild: 'Child QS', sn: 'Snack'
+  },
+
   _getRestaurant(id) {
     if (id == null) return undefined;
     // CSV-only selections store a synthetic "_csv_<slug>" string id with no DB
@@ -36,10 +44,24 @@ const CreditEngine = {
   },
 
   countCreditsForSelection(sel, restaurant) {
-    if (!restaurant || restaurant.creditCategory === 'oop') return 0;
-    // Snacks are per-item, not per-diner (one churro = one SN credit, not four)
-    if (restaurant.creditCategory === 'sn') return restaurant.creditsConsumed;
-    return restaurant.creditsConsumed * this.selectionDiners(sel).length;
+    return this.creditBreakdown(sel, restaurant).total;
+  },
+
+  // Split a selection's credit cost by diner age. Meals charge
+  // creditsConsumed per head into the adult or child bucket of their
+  // category; snacks are per-item (one churro = one SN credit) and never
+  // split. Returns { category, adults, children, adultCredits, childCredits, total }.
+  creditBreakdown(sel, restaurant) {
+    const empty = { category: 'oop', adults: 0, children: 0, adultCredits: 0, childCredits: 0, total: 0 };
+    if (!restaurant || restaurant.creditCategory === 'oop') return empty;
+    if (restaurant.creditCategory === 'sn') {
+      return { category: 'sn', adults: 0, children: 0, adultCredits: 0, childCredits: 0, total: restaurant.creditsConsumed };
+    }
+    let adults = 0, children = 0;
+    this.selectionDiners(sel).forEach(id => { this.isAdult(id) ? adults++ : children++; });
+    const adultCredits = restaurant.creditsConsumed * adults;
+    const childCredits = restaurant.creditsConsumed * children;
+    return { category: restaurant.creditCategory, adults, children, adultCredits, childCredits, total: adultCredits + childCredits };
   },
 
   // Returns full gross price (before VIP/AP discount) given a restaurant + diners list
@@ -59,44 +81,70 @@ const CreditEngine = {
 
   getBalance(poolId, planState) {
     const pool = POOLS[poolId];
-    const used = { ts: 0, qs: 0, sn: 0 };
+    const used = { tsAdult: 0, tsChild: 0, qsAdult: 0, qsChild: 0, sn: 0 };
 
     Object.values(planState.days).forEach(day => {
       Object.values(day.selections).forEach(sel => {
         if (!sel || sel.paymentMethod !== 'ddp' || sel.pool !== poolId) return;
         const r = this._getRestaurant(sel.restaurantId);
         if (!r || r.creditCategory === 'oop') return;
-        used[r.creditCategory] += this.countCreditsForSelection(sel, r);
+        const bd = this.creditBreakdown(sel, r);
+        if (bd.category === 'sn') {
+          used.sn += bd.total;
+        } else {
+          used[bd.category + 'Adult'] += bd.adultCredits;
+          used[bd.category + 'Child'] += bd.childCredits;
+        }
       });
     });
 
-    return {
-      ts: { total: pool.ts, used: used.ts, remaining: pool.ts - used.ts },
-      qs: { total: pool.qs, used: used.qs, remaining: pool.qs - used.qs },
-      sn: { total: pool.sn, used: used.sn, remaining: pool.sn - used.sn }
+    const mk = (total, u) => ({ total, used: u, remaining: total - u });
+    const b = {
+      tsAdult: mk(pool.tsAdult, used.tsAdult),
+      tsChild: mk(pool.tsChild, used.tsChild),
+      qsAdult: mk(pool.qsAdult, used.qsAdult),
+      qsChild: mk(pool.qsChild, used.qsChild),
+      sn: mk(pool.sn, used.sn)
     };
+    // Aggregate convenience totals (adult + child) for summaries and the
+    // availability page, which don't care about the age split.
+    b.ts = mk(b.tsAdult.total + b.tsChild.total, b.tsAdult.used + b.tsChild.used);
+    b.qs = mk(b.qsAdult.total + b.qsChild.total, b.qsAdult.used + b.qsChild.used);
+    return b;
   },
 
+  // Checks whether adding this selection would overdraft any of its credit
+  // buckets. Adult and child buckets are strictly separate, so a single
+  // meal can be checked against up to two buckets (e.g. 3 Adult TS + 1 Child
+  // TS). Returns { ok, checks: [{bucket,label,needed,currentRemaining,
+  // afterRemaining,total,ok}], worst }.
   wouldOverdraft(poolId, restaurantId, planState, dinerIds) {
     const r = this._getRestaurant(restaurantId);
-    if (!r || r.creditCategory === 'oop') return { ok: true, remaining: 0, deficit: 0 };
+    if (!r || r.creditCategory === 'oop') return { ok: true, checks: [], worst: null };
 
-    const diners = dinerIds && dinerIds.length ? dinerIds : this.defaultDiners();
-    // Snacks are per-item, not per-diner
-    const needed = r.creditCategory === 'sn' ? r.creditsConsumed : r.creditsConsumed * diners.length;
+    const sel = { diners: (dinerIds && dinerIds.length ? dinerIds : this.defaultDiners()) };
+    const bd = this.creditBreakdown(sel, r);
     const balance = this.getBalance(poolId, planState);
-    const cat = r.creditCategory;
-    const currentRemaining = balance[cat].remaining;
-    const afterRemaining = currentRemaining - needed;
-    return {
-      ok: afterRemaining >= 0,
-      currentRemaining,
-      afterRemaining,
-      total: balance[cat].total,
-      deficit: afterRemaining < 0 ? Math.abs(afterRemaining) : 0,
-      creditType: cat,
-      creditsNeeded: needed
+
+    const checks = [];
+    const addCheck = (bucket, needed) => {
+      if (needed <= 0) return;
+      const cur = balance[bucket].remaining;
+      checks.push({
+        bucket, label: this.BUCKET_LABELS[bucket], needed,
+        currentRemaining: cur, afterRemaining: cur - needed,
+        total: balance[bucket].total, ok: cur - needed >= 0
+      });
     };
+    if (bd.category === 'sn') {
+      addCheck('sn', bd.total);
+    } else {
+      addCheck(bd.category + 'Adult', bd.adultCredits);
+      addCheck(bd.category + 'Child', bd.childCredits);
+    }
+
+    const worst = checks.slice().sort((a, b) => a.afterRemaining - b.afterRemaining)[0] || null;
+    return { ok: checks.every(c => c.ok), checks, worst, creditType: r.creditCategory };
   },
 
   getPoolsForDate(dateStr) {
@@ -135,14 +183,15 @@ const CreditEngine = {
     // Overdraft check
     ['A', 'B'].forEach(poolId => {
       const balance = this.getBalance(poolId, planState);
-      ['ts', 'qs', 'sn'].forEach(type => {
-        if (balance[type].remaining < 0) {
+      this.BUCKETS.forEach(bucket => {
+        if (balance[bucket].remaining < 0) {
+          const over = Math.abs(balance[bucket].remaining);
           conflicts.push({
             type: 'overdraft',
             pool: poolId,
-            creditType: type,
+            creditType: bucket,
             severity: 'error',
-            message: `Bucket ${poolId} is ${Math.abs(balance[type].remaining)} ${type.toUpperCase()} credit${Math.abs(balance[type].remaining) !== 1 ? 's' : ''} over budget`
+            message: `Bucket ${poolId} is ${over} ${this.BUCKET_LABELS[bucket]} credit${over !== 1 ? 's' : ''} over budget`
           });
         }
       });
