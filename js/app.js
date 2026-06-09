@@ -8,7 +8,10 @@ const App = {
 
     const planState = Storage.load(Scenarios.getCurrent()) || Storage.getDefaultPlan();
     Planner.loadState(planState);
+    // Open focused on today (or the nearest upcoming day) instead of day 1.
+    Planner._activeDayIndex = Planner._todayIndex();
     Planner.render();
+    Planner.scrollToActiveDay('auto');
 
     Swipe.init('planner-container');
     this._bindKeyboard();
@@ -281,6 +284,7 @@ const App = {
           Planner.loadState(plan);
           Scenarios.save(plan);
           Planner.render();
+          Planner.scrollToActiveDay('auto');
           this.toast('Plan loaded from share link', 'success');
           window.location.hash = '';
         }

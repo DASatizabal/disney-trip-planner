@@ -10,6 +10,26 @@ const Planner = {
     return this._planState;
   },
 
+  // Local (device-clock) date as YYYY-MM-DD — matches the date strings in
+  // TRIP_DAYS and what matters when you're actually in the parks.
+  _localDateStr(d) {
+    d = d || new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  },
+
+  // Index of the trip day to focus on open: exact match for today, else the
+  // nearest upcoming day, else the final day (trip already over).
+  _todayIndex() {
+    const today = this._localDateStr();
+    const exact = TRIP_DAYS.findIndex(td => td.date === today);
+    if (exact >= 0) return exact;
+    const upcoming = TRIP_DAYS.findIndex(td => td.date >= today);
+    return upcoming >= 0 ? upcoming : TRIP_DAYS.length - 1;
+  },
+
   render() {
     const container = document.getElementById('planner-container');
     container.innerHTML = '';
@@ -35,8 +55,11 @@ const Planner = {
 
   _renderDayColumn(td, day, idx) {
     const col = document.createElement('div');
+    // Past days are grayed out (CSS .day-past) but stay fully interactive.
+    const isPast = td.date < this._localDateStr();
     col.className = 'day-column glass-card p-3 ' +
-      (td.overlapPool ? 'pool-overlap-card' : td.pool === 'A' ? 'pool-a-card' : 'pool-b-card');
+      (td.overlapPool ? 'pool-overlap-card' : td.pool === 'A' ? 'pool-a-card' : 'pool-b-card') +
+      (isPast ? ' day-past' : '');
     col.dataset.date = td.date;
 
     const dateLabel = new Date(td.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
@@ -982,18 +1005,25 @@ const Planner = {
   // Dots for mobile
   _renderDots() {
     const dots = document.getElementById('day-dots');
-    dots.innerHTML = TRIP_DAYS.map((_, i) =>
-      `<div class="day-dot ${i === this._activeDayIndex ? 'active' : ''}" onclick="Planner.goToDay(${i})"></div>`
+    const today = this._localDateStr();
+    dots.innerHTML = TRIP_DAYS.map((td, i) =>
+      `<div class="day-dot ${i === this._activeDayIndex ? 'active' : ''}${td.date < today ? ' past' : ''}" onclick="Planner.goToDay(${i})"></div>`
     ).join('');
+  },
+
+  // Scroll the active day column into view. Defaults to an instant jump
+  // (used on open); pass 'smooth' for in-app navigation.
+  scrollToActiveDay(behavior = 'auto') {
+    const container = document.getElementById('planner-container');
+    if (!container) return;
+    const cols = container.querySelectorAll('.day-column');
+    const col = cols[this._activeDayIndex];
+    if (col) col.scrollIntoView({ behavior, block: 'nearest', inline: 'start' });
   },
 
   goToDay(index) {
     this._activeDayIndex = Math.max(0, Math.min(index, TRIP_DAYS.length - 1));
-    const container = document.getElementById('planner-container');
-    const cols = container.querySelectorAll('.day-column');
-    if (cols[this._activeDayIndex]) {
-      cols[this._activeDayIndex].scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'start' });
-    }
+    this.scrollToActiveDay('smooth');
     this._renderDots();
   },
 
